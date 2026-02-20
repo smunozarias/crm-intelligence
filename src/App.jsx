@@ -31,21 +31,24 @@ import {
   Bell,
   Menu,
   ChevronRight,
-  ExternalLink
+  ExternalLink,
+  ShieldAlert
 } from 'lucide-react';
+import { supabase } from './lib/supabase';
 
 
 const App = () => {
+  // Authentication State
+  const [user, setUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
   // 1. CONFIGURATION STATES
-  const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiKey') || "");
   const [model, setModel] = useState(() => localStorage.getItem('geminiModel') || "gemini-2.5-flash");
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
   const [outboundTag, setOutboundTag] = useState(() => localStorage.getItem('outboundTag') || "Reunião 01");
   const [salesTag, setSalesTag] = useState(() => localStorage.getItem('salesTag') || "Reunião");
   const [dealId, setDealId] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Application States
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [analysis, setAnalysis] = useState(null);
@@ -56,12 +59,38 @@ const App = () => {
 
   // Save credentials to LocalStorage
   useEffect(() => {
-    localStorage.setItem('geminiKey', geminiKey);
     localStorage.setItem('geminiModel', model);
     localStorage.setItem('pipedriveToken', pipedriveToken);
     localStorage.setItem('outboundTag', outboundTag);
     localStorage.setItem('salesTag', salesTag);
-  }, [geminiKey, model, pipedriveToken, outboundTag, salesTag]);
+  }, [model, pipedriveToken, outboundTag, salesTag]);
+
+  // Handle Supabase Auth
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const handleGoogleLogin = async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      if (error) throw error;
+    } catch (error) {
+      showToast("Erro ao fazer login. Verifique as credenciais do Supabase.");
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   const showToast = (message) => {
     setToast(message);
@@ -206,85 +235,15 @@ const App = () => {
     try {
       setStatus("analyzing");
 
-      const systemPrompt = `
-      És um especialista em Operações de Vendas (SalesOps) e analista de CRM de topo da Branddi.
-      A tua tarefa é analisar o histórico bruto extraído via API de um negócio e extrair métricas de Estratégia e Qualidade.
-      
-      CONTEXTO CRÍTICO:
-      O sistema calculou os dias exatos de estagnação. Se existirem muitas interações recentes nas notas ou atividades, o negócio ESTÁ QUENTE E ATIVO.
-      
-      ANÁLISE ESTRATÉGICA:
-      1. PERSONAS ENVOLVIDAS: Nome, cargo e nível de engajamento real.
-      2. PONTOS DE DOR (PAIN POINTS): O que o cliente quer resolver.
-      3. OBJEÇÕES: Barreiras ativas (não resolvidas).
-      4. RESUMO EXECUTIVO: Resumo claro do momento atual do deal.
-      5. SENTIMENTO: Apenas responde "Positivo", "Neutro" ou "Negativo".
-      6. PRÓXIMOS PASSOS SUGERIDOS: Ações práticas para fechar o negócio.
-      7. SCORE (0 a 100): Se existe contato recente, o score NUNCA deve ser baixo.
-      
-      AUDITORIA DE QUALIDADE:
-      8. REGRA DE HIGIENE: Colar histórico do WhatsApp é o procedimento PADRÃO. NUNCA aponte como erro.
-      9. CONTAGEM DE REUNIÕES: Conta APENAS pelo "Tipo: [...]". Outbound = "[${outboundTag}]". Vendas = "[${salesTag}]".
-      `;
-
-      const responseSchema = {
-        type: "OBJECT",
-        properties: {
-          personas: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, cargo: { type: "STRING" }, engajamento: { type: "STRING" } } } },
-          dores: { type: "ARRAY", items: { type: "STRING" } },
-          objecoes: { type: "ARRAY", items: { type: "STRING" } },
-          resumo: { type: "STRING" },
-          sentimento: { type: "STRING" },
-          score: { type: "INTEGER" },
-          proximosPassos: { type: "ARRAY", items: { type: "STRING" } },
-          errosOrtografia: { type: "ARRAY", items: { type: "STRING" } },
-          objecoesMalContornadas: { type: "ARRAY", items: { type: "OBJECT", properties: { objecao: { type: "STRING" }, motivo: { type: "STRING" } } } },
-          regraPersonaCumprida: { type: "BOOLEAN" },
-          justificativaRegraPersona: { type: "STRING" },
-          reunioesOutbound: { type: "INTEGER" },
-          reunioesVendas: { type: "INTEGER" },
-          falhasPreenchimento: { type: "ARRAY", items: { type: "STRING" } },
-          prospeccao: {
-            type: "OBJECT",
-            properties: {
-              ultimaPessoaEngajada: { type: "OBJECT", properties: { nome: { type: "STRING" }, contexto: { type: "STRING" } } },
-              motivoNaoEvolucao: { type: "STRING" },
-              negativasFortes: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, motivo: { type: "STRING" } } } },
-              mapeamentoConta: { type: "ARRAY", items: { type: "OBJECT", properties: { area: { type: "STRING" }, pessoas: { type: "ARRAY", items: { type: "STRING" } } } } },
-              historicoReunioesEstagnadas: { type: "ARRAY", items: { type: "OBJECT", properties: { data: { type: "STRING" }, participantes: { type: "STRING" }, motivo: { type: "STRING" } } } }
-            }
-          },
-          participantesMapa: {
-            type: "OBJECT",
-            properties: {
-              alertaStakeholder: { type: "OBJECT", properties: { existe: { type: "BOOLEAN" }, contexto: { type: "STRING" } } },
-              removerDoCard: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, motivo: { type: "STRING" } } } },
-              equipeEmpresa: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, email: { type: "STRING" }, cargoInferido: { type: "STRING" } } } },
-              equipeAgencia: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, email: { type: "STRING" }, nomeAgencia: { type: "STRING" } } } }
-            }
-          }
-        },
-        required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa"]
-      };
-
-      const activeApiKey = geminiKey.trim();
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model.trim()}:generateContent?key=${activeApiKey}`, {
+      const response = await fetch(`/api/gemini`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Analisa este histórico do CRM:\n\n${historyText}` }] }],
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          generationConfig: {
-            responseMimeType: "application/json",
-            responseSchema: responseSchema
-          }
-        })
+        body: JSON.stringify({ historyText, model })
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        const errorMessage = errorData.error?.message || "Erro desconhecido na API Gemini";
-        throw new Error(`Erro Gemini: ${errorMessage}`);
+        throw new Error(errorData.error || "Erro desconhecido na API Vercel");
       }
 
       const result = await response.json();
@@ -302,9 +261,9 @@ const App = () => {
   };
 
   const handleStartProcess = async () => {
-    if (!pipedriveToken || !dealId || !geminiKey) {
+    if (!pipedriveToken || !dealId) {
       setActiveTab("config");
-      showToast("Preencha as configurações primeiro!");
+      showToast("Preencha as configurações do Pipedrive primeiro!");
       return;
     }
     const historyData = await fetchPipedriveData();
@@ -329,6 +288,41 @@ const App = () => {
     </div>
   );
 
+  if (authLoading) {
+    return (
+      <div className="flex h-screen w-screen bg-slate-50 items-center justify-center">
+        <Loader2 className="animate-spin text-branddi-cyan" size={40} />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="flex h-screen w-screen bg-slate-50 items-center justify-center p-4">
+        <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl shadow-slate-200/50 text-center border border-slate-100">
+          <div className="w-16 h-16 bg-branddi-cyan/10 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Zap size={32} className="text-branddi-cyan" fill="#001D2E" />
+          </div>
+          <h1 className="text-2xl font-black text-slate-800 tracking-tight">CRM Intelligence</h1>
+          <p className="text-slate-500 text-sm mt-2 mb-8">Faça login com a sua conta corporativa para acessar a inteligência de vendas da Branddi.</p>
+
+          <button
+            onClick={handleGoogleLogin}
+            className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 text-slate-700 font-bold py-3 px-4 rounded-xl hover:bg-slate-50 hover:border-slate-300 transition-all shadow-sm group"
+          >
+            <svg className="w-5 h-5" viewBox="0 0 24 24">
+              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+            </svg>
+            <span className="group-hover:text-slate-900">Continuar com Google</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* SIDEBAR */}
@@ -350,8 +344,8 @@ const App = () => {
           <div className={`pt-4 ${!analysis ? 'opacity-40 pointer-events-none' : ''}`}>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Relatórios IA</p>
             <SidebarIcon icon={LayoutDashboard} label="Dashboard" id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} />
-            <SidebarIcon icon={TrendingUp} label="Estratégia" id="estrategia" active={activeTab === 'estrategia'} onClick={setActiveTab} />
-            <SidebarIcon icon={Target} label="Qualidade" id="qualidade" active={activeTab === 'qualidade'} onClick={setActiveTab} />
+            <SidebarIcon icon={Target} label="Inteligência" id="inteligencia" active={activeTab === 'inteligencia'} onClick={setActiveTab} />
+            <SidebarIcon icon={ShieldAlert} label="Zona de Perigo" id="perigo" active={activeTab === 'perigo'} onClick={setActiveTab} />
             <SidebarIcon icon={Search} label="Prospecção" id="prospeccao" active={activeTab === 'prospeccao'} onClick={setActiveTab} />
             <SidebarIcon icon={Users} label="Participantes" id="participantes" active={activeTab === 'participantes'} onClick={setActiveTab} />
           </div>
@@ -359,10 +353,10 @@ const App = () => {
 
         <div className="p-4 border-t border-slate-800">
           <div className="bg-slate-800/50 p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-slate-800 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-branddi-cyan/20 flex items-center justify-center text-branddi-cyan font-bold text-xs">SM</div>
+            <div className="w-8 h-8 rounded-full bg-branddi-cyan/20 flex items-center justify-center text-branddi-cyan font-bold text-xs">{user?.email?.charAt(0).toUpperCase() || 'U'}</div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-xs font-bold text-white truncate">S. Muñoz Arias</p>
-              <p className="text-[10px] text-slate-400 truncate">Branddi Ops</p>
+              <p className="text-xs font-bold text-white truncate">{user?.user_metadata?.full_name || user?.email}</p>
+              <button onClick={handleLogout} className="text-[10px] text-slate-400 truncate hover:text-white transition-colors">Sair da Conta</button>
             </div>
           </div>
         </div>
@@ -422,23 +416,14 @@ const App = () => {
                   </div>
 
                   <div className="space-y-4">
-                    <div>
-                      <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Gemini Key</label>
-                      <input
-                        type="password"
-                        value={geminiKey}
-                        onChange={(e) => setGeminiKey(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
-                        placeholder="AlzaSy..."
-                      />
-                    </div>
+                    <p className="text-sm text-slate-500 mb-4">A inteligência está sendo rodada em servidores seguros. Sua chave do Google Cloud está protegida na Vercel.</p>
                     <div>
                       <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Pipedrive Token</label>
                       <input
                         type="password"
                         value={pipedriveToken}
                         onChange={(e) => setPipedriveToken(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-branddi-cyan outline-none transition-all"
                         placeholder="Token do seu CRM"
                       />
                     </div>
@@ -714,43 +699,52 @@ const App = () => {
                 </div>
               )}
 
-              {/* TABS ESTRATEGIA, QUALIDADE ETC PODEM SER ADICIONADOS AQUI SEGUINDO O MESMO PADRAO */}
-              {activeTab === 'estrategia' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 fade-in">
-                  <div className="card p-8">
-                    <SectionTitle title="Personas Envolvidas" subtitle="Quem manda no negócio." />
-                    <div className="space-y-4">
-                      {analysis.personas.map((p, i) => (
-                        <div key={i} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
-                              <User size={20} />
+              {/* TABS REORGANIZADAS */}
+              {activeTab === 'inteligencia' && (
+                <div className="space-y-8 fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="card p-8">
+                      <SectionTitle title="Personas Envolvidas" subtitle="Quem manda no negócio." />
+                      <div className="space-y-4">
+                        {analysis.personas.map((p, i) => (
+                          <div key={i} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                            <div className="flex items-center gap-4">
+                              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                                <User size={20} />
+                              </div>
+                              <div>
+                                <p className="font-bold text-slate-800 leading-none">{p.nome || "Não definido"}</p>
+                                <p className="text-xs text-slate-500 mt-1">{p.cargo}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="font-bold text-slate-800 leading-none">{p.nome || "Não definido"}</p>
-                              <p className="text-xs text-slate-500 mt-1">{p.cargo}</p>
-                            </div>
+                            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${p.engajamento === 'Alto' ? 'bg-emerald-100 text-emerald-700' : p.engajamento === 'Baixo' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
+                              {p.engajamento}
+                            </span>
                           </div>
-                          <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${p.engajamento === 'Alto' ? 'bg-emerald-100 text-emerald-700' : p.engajamento === 'Baixo' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
-                            {p.engajamento}
-                          </span>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
-                  </div>
 
-                  <div className="card p-8">
-                    <SectionTitle title="Insights de Conversão" subtitle="Onde o deal pode travat." />
-                    <div className="space-y-6">
-                      <div>
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Objeções Mal Contornadas</p>
-                        <div className="space-y-3">
-                          {analysis.objecoesMalContornadas?.length > 0 ? analysis.objecoesMalContornadas.map((item, i) => (
-                            <div key={i} className="bg-red-50/50 p-4 rounded-xl border-l-4 border-red-500">
-                              <p className="text-sm font-bold text-red-800">{item.objecao}</p>
-                              <p className="text-xs text-red-600 mt-1">{item.motivo}</p>
+                    <div className="space-y-8">
+                      <div className="card p-8">
+                        <SectionTitle title="Regra da Persona" subtitle="O card está associado à pessoa certa?" />
+                        <div className={`mt-4 p-6 rounded-xl border-2 flex items-start gap-4 ${analysis.regraPersonaCumprida ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                          {analysis.regraPersonaCumprida ? <CheckCircle size={24} className="text-emerald-600 shrink-0" /> : <AlertCircle size={24} className="text-red-600 shrink-0" />}
+                          <div>
+                            <p className={`font-bold uppercase text-xs mb-1 ${analysis.regraPersonaCumprida ? 'text-emerald-700' : 'text-red-700'}`}>{analysis.regraPersonaCumprida ? 'Regra Cumprida' : 'Falha na Regra Persona'}</p>
+                            <p className="text-sm text-slate-700 leading-tight">{analysis.justificativaRegraPersona}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="card p-8">
+                        <SectionTitle title="Erros de Ortografia/Clareza" subtitle="Foco nas notas do vendedor." />
+                        <div className="space-y-2 mt-4">
+                          {analysis.errosOrtografia?.length > 0 ? analysis.errosOrtografia.map((err, i) => (
+                            <div key={i} className="text-sm p-3 bg-slate-50 text-slate-700 rounded-lg flex items-center gap-2">
+                              {err}
                             </div>
-                          )) : <p className="text-sm text-slate-400">Nenhuma objeção mal contornada detectada.</p>}
+                          )) : <div className="text-sm p-3 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-2"><CheckCircle size={14} /> Gramática perfeita.</div>}
                         </div>
                       </div>
                     </div>
@@ -758,29 +752,36 @@ const App = () => {
                 </div>
               )}
 
-              {/* OUTRAS TABS SEGUINDO O LAYOUT DE CARDS */}
-              {activeTab === 'qualidade' && (
+              {activeTab === 'perigo' && (
                 <div className="space-y-8 fade-in">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="card p-8">
-                      <SectionTitle title="Erros de Ortografia/Clareza" subtitle="Foco nas notas do vendedor." />
-                      <div className="space-y-2 mt-4">
-                        {analysis.errosOrtografia?.length > 0 ? analysis.errosOrtografia.map((err, i) => (
-                          <div key={i} className="text-sm p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
-                            <AlertCircle size={14} />
-                            {err}
+                    <div className="card p-8 border-t-8 border-red-600">
+                      <SectionTitle title="Objeções Mal Contornadas" subtitle="O que o cliente disse que não foi bem respondido." />
+                      <div className="space-y-3 mt-4">
+                        {analysis.objecoesMalContornadas?.length > 0 ? analysis.objecoesMalContornadas.map((item, i) => (
+                          <div key={i} className="bg-red-50/50 p-4 rounded-xl border-l-4 border-red-500">
+                            <p className="text-sm font-bold text-red-800">{item.objecao}</p>
+                            <p className="text-xs text-red-600 mt-1">{item.motivo}</p>
                           </div>
-                        )) : <div className="text-sm p-3 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-2"><CheckCircle size={14} /> Gramática perfeita.</div>}
+                        )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma objeção mal contornada detectada.</p></div>}
                       </div>
                     </div>
 
-                    <div className="card p-8">
-                      <SectionTitle title="Regra da Persona" subtitle="O card está associado à pessoa certa?" />
-                      <div className={`mt-4 p-6 rounded-xl border-2 flex items-start gap-4 ${analysis.regraPersonaCumprida ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                        {analysis.regraPersonaCumprida ? <CheckCircle size={24} className="text-emerald-600 shrink-0" /> : <AlertCircle size={24} className="text-red-600 shrink-0" />}
-                        <div>
-                          <p className={`font-bold uppercase text-xs mb-1 ${analysis.regraPersonaCumprida ? 'text-emerald-700' : 'text-red-700'}`}>{analysis.regraPersonaCumprida ? 'Regra Cumprida' : 'Falha na Regra Persona'}</p>
-                          <p className="text-sm text-slate-700 leading-tight">{analysis.justificativaRegraPersona}</p>
+                    <div className="card p-8 border-t-8 border-orange-500">
+                      <SectionTitle title="Negativas Fortes" subtitle="Barreiras rígidas extraídas da prospecção." />
+                      <div className="space-y-3 mt-4">
+                        {analysis.prospeccao?.negativasFortes?.length > 0 ? analysis.prospeccao?.negativasFortes.map((item, i) => (
+                          <div key={i} className="bg-orange-50/50 p-4 rounded-xl border-l-4 border-orange-500">
+                            <p className="text-sm font-bold text-orange-800">{item.nome}</p>
+                            <p className="text-xs text-orange-600 mt-1">{item.motivo}</p>
+                          </div>
+                        )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma negativa forte levantada.</p></div>}
+                      </div>
+
+                      <div className="mt-8 pt-6 border-t border-slate-100">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Motivo Resumo de Estagnação</p>
+                        <div className="bg-slate-900 rounded-xl p-4 text-white text-sm font-bold">
+                          {analysis.prospeccao?.motivoNaoEvolucao || "Nenhum motivo claro identificado pela IA."}
                         </div>
                       </div>
                     </div>
