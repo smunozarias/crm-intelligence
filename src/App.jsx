@@ -36,7 +36,6 @@ const App = () => {
   const [outboundTag, setOutboundTag] = useState(() => localStorage.getItem('outboundTag') || "Reunião 01");
   const [salesTag, setSalesTag] = useState(() => localStorage.getItem('salesTag') || "Reunião");
   const [dealId, setDealId] = useState("");
-  const [useCorsProxy, setUseCorsProxy] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [status, setStatus] = useState("idle");
@@ -110,20 +109,17 @@ const App = () => {
       setStatus("fetching");
       setErrorMsg("");
 
-      const dealUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${pipedriveToken}`;
-      const fetchDealUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(dealUrl)}` : dealUrl;
+      const dealUrl = `/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`;
+      const participantsUrl = `/api/pipedrive/deals/${dealId}/participants?api_token=${pipedriveToken}`;
 
-      const participantsUrl = `https://api.pipedrive.com/v1/deals/${dealId}/participants?api_token=${pipedriveToken}`;
-      const fetchParticipantsUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(participantsUrl)}` : participantsUrl;
-
-      const dealRes = await fetch(fetchDealUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+      const dealRes = await fetch(dealUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
       if (!dealRes.ok) {
         const errorText = await dealRes.text();
-        throw new Error(`Erro na API (${dealRes.status}): ${dealRes.status === 401 ? "Token inválido" : "Negócio não encontrado ou erro no Proxy"}. Detalhes: ${errorText.substring(0, 50)}`);
+        throw new Error(`Erro na API (${dealRes.status}): ${dealRes.status === 401 ? "Token inválido" : "Negócio não encontrado"}. Detalhes: ${errorText.substring(0, 50)}`);
       }
 
-      const participantsRes = await fetch(fetchParticipantsUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+      const participantsRes = await fetch(participantsUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
       const dealData = await dealRes.json();
       const participantsData = participantsRes.ok ? await participantsRes.json() : { success: false, data: [] };
@@ -135,10 +131,9 @@ const App = () => {
       let moreItems = true;
 
       while (moreItems) {
-        const flowUrl = `https://api.pipedrive.com/v1/deals/${dealId}/flow?api_token=${pipedriveToken}&limit=100&start=${start}`;
-        const fetchFlowUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(flowUrl)}` : flowUrl;
+        const flowUrl = `/api/pipedrive/deals/${dealId}/flow?api_token=${pipedriveToken}&limit=100&start=${start}`;
 
-        const flowRes = await fetch(fetchFlowUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+        const flowRes = await fetch(flowUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
         if (!flowRes.ok) throw new Error("Erro ao buscar histórico.");
 
         const flowData = await flowRes.json();
@@ -454,21 +449,6 @@ const App = () => {
                       </div>
                     </div>
                   )}
-                </div>
-
-                <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
-                      checked={useCorsProxy}
-                      onChange={(e) => setUseCorsProxy(e.target.checked)}
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-slate-700 block">Usar CORS Proxy</span>
-                      <span className="text-[11px] text-slate-500 block leading-tight mt-1">Evita bloqueios de navegador.</span>
-                    </div>
-                  </label>
                 </div>
 
                 <button
