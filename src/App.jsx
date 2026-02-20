@@ -334,7 +334,7 @@ const App = () => {
           </div>
           <div className="flex flex-col">
             <span className="font-bold text-slate-800 leading-tight">Pipedrive</span>
-            <span className="text-xs font-semibold text-orange-600 uppercase tracking-widest">Intelligence</span>
+            <span className="text-[10px] font-bold text-orange-600 uppercase tracking-tight">Intelligence Branddi</span>
           </div>
         </div>
 
