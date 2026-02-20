@@ -34,7 +34,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-1.5-flash";
 
 const App = () => {
   // 1. CONFIGURATION STATES
@@ -280,7 +280,11 @@ const App = () => {
         })
       });
 
-      if (!response.ok) throw new Error("Chave Gemini inválida ou limite excedido.");
+      if (!response.ok) {
+        const errorData = await response.json();
+        const errorMessage = errorData.error?.message || "Erro desconhecido na API Gemini";
+        throw new Error(`Erro Gemini: ${errorMessage}`);
+      }
 
       const result = await response.json();
       let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
@@ -310,7 +314,7 @@ const App = () => {
   const SidebarIcon = ({ icon: Icon, label, id, active, onClick }) => (
     <div
       onClick={() => onClick(id)}
-      className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+      className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors cursor-pointer ${active ? 'bg-branddi-cyan text-branddi-navy font-bold' : 'text-slate-400 hover:bg-slate-800'}`}
     >
       <Icon size={20} />
       <span className="text-sm font-medium">{label}</span>
@@ -327,23 +331,23 @@ const App = () => {
   return (
     <div className="flex h-screen bg-slate-50 overflow-hidden">
       {/* SIDEBAR */}
-      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col z-20">
+      <aside className="w-64 bg-branddi-navy border-r border-slate-800 flex flex-col z-20 text-white">
         <div className="p-6 flex items-center gap-3">
-          <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200">
-            <Zap size={24} fill="white" />
+          <div className="w-10 h-10 bg-branddi-cyan rounded-xl flex items-center justify-center text-branddi-navy shadow-lg shadow-branddi-cyan/20">
+            <Zap size={24} fill="#001D2E" />
           </div>
           <div className="flex flex-col">
-            <span className="font-bold text-slate-800 leading-tight">Pipedrive</span>
-            <span className="text-[10px] font-bold text-orange-600 uppercase tracking-tight">Intelligence Branddi</span>
+            <span className="font-bold text-white leading-tight">Pipedrive</span>
+            <span className="text-[10px] font-bold text-branddi-cyan uppercase tracking-tight">Intelligence Branddi</span>
           </div>
         </div>
 
         <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
-          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 mb-2">Principal</p>
+          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Principal</p>
           <SidebarIcon icon={Settings} label="Configurações" id="config" active={activeTab === 'config'} onClick={setActiveTab} />
 
           <div className={`pt-4 ${!analysis ? 'opacity-40 pointer-events-none' : ''}`}>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 mb-2">Relatórios IA</p>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Relatórios IA</p>
             <SidebarIcon icon={LayoutDashboard} label="Dashboard" id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} />
             <SidebarIcon icon={TrendingUp} label="Estratégia" id="estrategia" active={activeTab === 'estrategia'} onClick={setActiveTab} />
             <SidebarIcon icon={Target} label="Qualidade" id="qualidade" active={activeTab === 'qualidade'} onClick={setActiveTab} />
@@ -352,12 +356,12 @@ const App = () => {
           </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-100">
-          <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-slate-100 transition-colors">
-            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs">SM</div>
+        <div className="p-4 border-t border-slate-800">
+          <div className="bg-slate-800/50 p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-slate-800 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-branddi-cyan/20 flex items-center justify-center text-branddi-cyan font-bold text-xs">SM</div>
             <div className="flex-1 overflow-hidden">
-              <p className="text-xs font-bold text-slate-700 truncate">S. Muñoz Arias</p>
-              <p className="text-[10px] text-slate-500 truncate">Branddi Ops</p>
+              <p className="text-xs font-bold text-white truncate">S. Muñoz Arias</p>
+              <p className="text-[10px] text-slate-400 truncate">Branddi Ops</p>
             </div>
           </div>
         </div>
@@ -375,12 +379,12 @@ const App = () => {
             />
           </div>
           <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors relative">
+            <button className="p-2 text-slate-400 hover:text-branddi-cyan transition-colors relative">
               <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
+              <span className="absolute top-2 right-2 w-2 h-2 bg-branddi-cyan rounded-full border-2 border-white"></span>
             </button>
             <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
-            <button className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all shadow-md shadow-slate-200 active:scale-95">
+            <button className="flex items-center gap-2 bg-branddi-navy text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all shadow-md shadow-slate-200 active:scale-95 border border-branddi-cyan/20">
               <Cpu size={16} />
               <span>Gerar Insight</span>
             </button>
@@ -441,9 +445,9 @@ const App = () => {
                 </div>
 
                 {/* DEAL CARD */}
-                <div className="card p-6 border-2 border-orange-100">
+                <div className="card p-6 border-2 border-branddi-cyan/20">
                   <div className="flex items-center gap-3 mb-6">
-                    <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-lg flex items-center justify-center">
+                    <div className="w-10 h-10 bg-branddi-cyan/10 text-branddi-cyan rounded-lg flex items-center justify-center">
                       <LayoutDashboard size={20} />
                     </div>
                     <div>
@@ -456,12 +460,12 @@ const App = () => {
                     <div>
                       <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Deal ID (Pipedrive)</label>
                       <div className="relative">
-                        <Hash className="absolute left-3 top-2.5 text-orange-400" size={16} />
+                        <Hash className="absolute left-3 top-2.5 text-branddi-cyan" size={16} />
                         <input
                           type="text"
                           value={dealId}
                           onChange={(e) => setDealId(e.target.value)}
-                          className="w-full bg-white border-2 border-orange-100 rounded-lg pl-10 pr-4 py-2 text-sm font-bold text-orange-600 focus:border-orange-500 outline-none transition-all"
+                          className="w-full bg-white border-2 border-branddi-cyan/10 rounded-lg pl-10 pr-4 py-2 text-sm font-bold text-branddi-navy focus:border-branddi-cyan outline-none transition-all"
                           placeholder="Ex: 10298"
                         />
                       </div>
@@ -470,12 +474,12 @@ const App = () => {
                     <button
                       onClick={handleStartProcess}
                       disabled={status === 'fetching' || status === 'analyzing'}
-                      className="btn-primary w-full flex items-center justify-center gap-2"
+                      className="w-full bg-branddi-cyan hover:bg-[#08b8c7] text-branddi-navy font-bold py-2.5 px-6 rounded-lg shadow-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98] flex items-center justify-center gap-2"
                     >
                       {status === 'fetching' || status === 'analyzing' ? (
                         <Loader2 className="animate-spin" size={20} />
                       ) : (
-                        <Zap size={18} fill="white" />
+                        <Zap size={18} fill="#001D2E" />
                       )}
                       <span>Iniciar Inteligência Branddi</span>
                     </button>
@@ -539,13 +543,13 @@ const App = () => {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-8">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Análise em tempo real</span>
+                    <span className="bg-branddi-cyan/20 text-branddi-navy text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border border-branddi-cyan/30">Análise em tempo real</span>
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-500 text-xs font-medium">Extraído em {new Date().toLocaleTimeString()}</span>
                   </div>
                   <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Análise do Deal #{dealId}</h1>
                   <p className="text-slate-500 text-sm mt-1 flex items-center gap-1.5">
-                    <Target size={14} className="text-orange-500" />
+                    <Target size={14} className="text-branddi-cyan" />
                     Status do Algoritmo: <span className="text-emerald-600 font-bold">Processado com Sucesso</span>
                   </p>
                 </div>
