@@ -38,7 +38,7 @@ import {
 const App = () => {
   // 1. CONFIGURATION STATES
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiKey') || "");
-  const [model, setModel] = useState(() => localStorage.getItem('geminiModel') || "gemini-1.5-flash");
+  const [model, setModel] = useState(() => localStorage.getItem('geminiModel') || "gemini-2.5-flash");
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
   const [outboundTag, setOutboundTag] = useState(() => localStorage.getItem('outboundTag') || "Reunião 01");
   const [salesTag, setSalesTag] = useState(() => localStorage.getItem('salesTag') || "Reunião");
@@ -268,7 +268,7 @@ const App = () => {
       };
 
       const activeApiKey = geminiKey.trim();
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${activeApiKey}`, {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/${model.trim()}:generateContent?key=${activeApiKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -510,8 +510,9 @@ const App = () => {
                         onChange={(e) => setModel(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium outline-none"
                       >
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash (Padrão)</option>
-                        <option value="gemini-1.5-flash-latest">Gemini 1.5 Flash (Latest)</option>
+                        <option value="gemini-2.5-flash">Gemini 2.5 Flash (Padrão)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
                         <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
                         <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
                       </select>
