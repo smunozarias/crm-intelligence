@@ -1,100 +1,84 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
-*, *::before, *::after {
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background-color: #f8fafc;
-  color: #0f172a;
-  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-.font-sans {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-}
+@layer utilities {
+  .animate-in {
+    animation-fill-mode: both;
+  }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+  .fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+  .slide-in-from-bottom-4 {
+    animation: slideInFromBottom 0.5s ease-out;
+  }
+
+  .slide-in-from-top-4 {
+    animation: slideInFromTop 0.3s ease-out;
+  }
+
+  .slide-in-from-top-2 {
+    animation: slideInFromTop 0.2s ease-out;
+  }
+
+  .duration-500 {
+    animation-duration: 0.5s;
+  }
+
+  .duration-300 {
+    animation-duration: 0.3s;
+  }
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideInFromBottom {
-  from { 
+  from {
     opacity: 0;
     transform: translateY(16px);
   }
-  to { 
+
+  to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
 @keyframes slideInFromTop {
-  from { 
+  from {
     opacity: 0;
     transform: translateY(-8px);
   }
-  to { 
+
+  to {
     opacity: 1;
     transform: translateY(0);
   }
 }
 
-.animate-spin {
-  animation: spin 1s linear infinite;
-}
-
-.animate-pulse {
-  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
-.animate-in {
-  animation-fill-mode: both;
-}
-
-.fade-in {
-  animation-name: fadeIn;
-  animation-duration: 0.3s;
-}
-
-.slide-in-from-bottom-4 {
-  animation-name: slideInFromBottom;
-  animation-duration: 0.5s;
-}
-
-.slide-in-from-top-4 {
-  animation-name: slideInFromTop;
-  animation-duration: 0.3s;
-}
-
-.slide-in-from-top-2 {
-  animation-name: slideInFromTop;
-  animation-duration: 0.2s;
-}
-
-.duration-500 {
-  animation-duration: 0.5s;
-}
-
-.duration-300 {
-  animation-duration: 0.3s;
-}
-
-/* Scrollbar */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
