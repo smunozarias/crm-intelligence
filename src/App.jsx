@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Users, 
-  MessageSquare, 
-  TrendingUp, 
-  AlertCircle, 
-  CheckCircle, 
+import {
+  Search,
+  Users,
+  MessageSquare,
+  TrendingUp,
+  AlertCircle,
+  CheckCircle,
   Cpu,
   Loader2,
   Key,
@@ -39,7 +39,7 @@ const App = () => {
   const [useCorsProxy, setUseCorsProxy] = useState(true);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
-  const [status, setStatus] = useState("idle"); 
+  const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [hardMetrics, setHardMetrics] = useState(null);
@@ -92,14 +92,14 @@ const App = () => {
       const itemDate = parsePipedriveDate(item.add_time);
       if (itemDate > maxActionDate) maxActionDate = itemDate;
     });
-    
+
     const daysInactive = Math.floor((today - maxActionDate) / (1000 * 3600 * 24));
     const totalActions = flowItems.length;
 
-    const metrics = { 
-      daysOpen: Math.max(0, daysOpen), 
-      daysInactive: Math.max(0, daysInactive), 
-      totalActions 
+    const metrics = {
+      daysOpen: Math.max(0, daysOpen),
+      daysInactive: Math.max(0, daysInactive),
+      totalActions
     };
     setHardMetrics(metrics);
     return metrics;
@@ -109,7 +109,7 @@ const App = () => {
     try {
       setStatus("fetching");
       setErrorMsg("");
-      
+
       const dealUrl = `https://api.pipedrive.com/v1/deals/${dealId}?api_token=${pipedriveToken}`;
       const fetchDealUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(dealUrl)}` : dealUrl;
 
@@ -117,29 +117,33 @@ const App = () => {
       const fetchParticipantsUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(participantsUrl)}` : participantsUrl;
 
       const dealRes = await fetch(fetchDealUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+
+      if (!dealRes.ok) {
+        const errorText = await dealRes.text();
+        throw new Error(`Erro na API (${dealRes.status}): ${dealRes.status === 401 ? "Token inválido" : "Negócio não encontrado ou erro no Proxy"}. Detalhes: ${errorText.substring(0, 50)}`);
+      }
+
       const participantsRes = await fetch(fetchParticipantsUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
 
-      if (!dealRes.ok) throw new Error("Token Pipedrive inválido ou Deal não encontrado.");
-
       const dealData = await dealRes.json();
-      const participantsData = await participantsRes.json();
-      
-      if (!dealData.success) throw new Error("Deal não encontrado.");
+      const participantsData = participantsRes.ok ? await participantsRes.json() : { success: false, data: [] };
+
+      if (!dealData.success) throw new Error("A API do Pipedrive retornou sucesso=false para este Deal.");
 
       let allFlowItems = [];
       let start = 0;
       let moreItems = true;
-      
+
       while (moreItems) {
         const flowUrl = `https://api.pipedrive.com/v1/deals/${dealId}/flow?api_token=${pipedriveToken}&limit=100&start=${start}`;
         const fetchFlowUrl = useCorsProxy ? `https://corsproxy.io/?${encodeURIComponent(flowUrl)}` : flowUrl;
-        
+
         const flowRes = await fetch(fetchFlowUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
         if (!flowRes.ok) throw new Error("Erro ao buscar histórico.");
-        
+
         const flowData = await flowRes.json();
         if (flowData.data) allFlowItems = allFlowItems.concat(flowData.data);
-        
+
         if (flowData.additional_data?.pagination?.more_items_in_collection) {
           start = flowData.additional_data.pagination.next_start;
         } else {
@@ -164,15 +168,15 @@ const App = () => {
         });
       }
       compiledHistory += `\n--- HISTÓRICO DE ATIVIDADES ---\n`;
-      
+
       allFlowItems.forEach(item => {
         let dateStr = "Data desconhecida";
-        try { dateStr = new Date(parsePipedriveDate(item.add_time)).toLocaleDateString('pt-PT'); } catch(e) {}
-        
+        try { dateStr = new Date(parsePipedriveDate(item.add_time)).toLocaleDateString('pt-PT'); } catch (e) { }
+
         if (item.object === 'note') {
           const cleanNote = typeof item.data?.content === 'string' ? item.data.content.replace(/<[^>]*>?/gm, '') : '';
           compiledHistory += `[${dateStr}] NOTA: ${cleanNote}\n`;
-        } 
+        }
         else if (item.object === 'activity') {
           compiledHistory += `[${dateStr}] ATIVIDADE | Tipo: [${item.data?.type}] | Assunto: [${item.data?.subject}] | Estado: ${item.data?.done ? 'Concluída' : 'Pendente'}\n`;
           if (typeof item.data?.note === 'string') {
@@ -199,7 +203,7 @@ const App = () => {
   const analyzeWithGemini = async (historyText) => {
     try {
       setStatus("analyzing");
-      
+
       const systemPrompt = `
       És um especialista em Operações de Vendas (SalesOps) e analista de CRM de topo.
       A tua tarefa é analisar o histórico bruto extraído via API de um negócio e extrair métricas de Estratégia e Qualidade.
@@ -283,7 +287,7 @@ const App = () => {
             body: JSON.stringify({
               contents: [{ parts: [{ text: `Analisa este histórico do CRM:\n\n${historyText}` }] }],
               systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: { 
+              generationConfig: {
                 responseMimeType: "application/json",
                 responseSchema: responseSchema
               }
@@ -293,7 +297,7 @@ const App = () => {
           if (!response.ok) {
             throw new Error("Chave Gemini inválida. Por favor, verifique a sua chave no Google AI Studio.");
           }
-          
+
           result = await response.json();
           break;
         } catch (e) {
@@ -305,12 +309,12 @@ const App = () => {
 
       let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
       rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-      
+
       let parsedData;
       try {
-         parsedData = JSON.parse(rawText);
+        parsedData = JSON.parse(rawText);
       } catch (e) {
-         throw new Error("A IA gerou um formato de dados inválido.");
+        throw new Error("A IA gerou um formato de dados inválido.");
       }
 
       setAnalysis(parsedData);
@@ -340,7 +344,7 @@ const App = () => {
   const safeObj = (obj) => typeof obj === 'object' && obj !== null ? obj : {};
 
   const generateCRMSummary = () => {
-    const text = `🤖 **Resumo Gerado por IA (Deal Intel)**\n\n📋 **Estado Atual:**\n${analysis?.resumo || ''}\n\n🎯 **Principais Dores:**\n${safeArray(analysis?.dores).map(d => `• ${d}`).join('\n')}\n\n🚧 **Objeções Identificadas:**\n${safeArray(analysis?.objecoes).map(o => `• ${o}`).join('\n')}\n\n✅ **Próximos Passos Sugeridos:**\n${safeArray(analysis?.proximosPassos).map((p, i) => `${i+1}. ${p}`).join('\n')}\n`;
+    const text = `🤖 **Resumo Gerado por IA (Deal Intel)**\n\n📋 **Estado Atual:**\n${analysis?.resumo || ''}\n\n🎯 **Principais Dores:**\n${safeArray(analysis?.dores).map(d => `• ${d}`).join('\n')}\n\n🚧 **Objeções Identificadas:**\n${safeArray(analysis?.objecoes).map(o => `• ${o}`).join('\n')}\n\n✅ **Próximos Passos Sugeridos:**\n${safeArray(analysis?.proximosPassos).map((p, i) => `${i + 1}. ${p}`).join('\n')}\n`;
     copyToClipboard(text);
   };
 
@@ -348,16 +352,16 @@ const App = () => {
     const prospeccao = safeObj(analysis?.prospeccao);
     const pessoa = prospeccao?.ultimaPessoaEngajada?.nome || "Nome";
     const trava = prospeccao?.motivoNaoEvolucao || "algumas prioridades da época";
-    
+
     const draft = `Assunto: Retomada de contato - Branddi\n\nOlá ${pessoa.split(' ')[0]}, tudo bem?\n\nEstou entrando em contato pois na nossa última interação, o avanço do projeto acabou pausando devido a ${trava.toLowerCase()}.\n\nGostaria de entender se esse cenário mudou na empresa e se faz sentido retomarmos nossa conversa para proteger a marca de vocês.\n\nFico à disposição para um papo rápido de 15 minutos na próxima semana.\n\nUm abraço,`;
-    
+
     setEmailDraft(draft);
     copyToClipboard(draft);
   };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 font-sans relative">
-      
+
       {toast && (
         <div className="fixed top-4 right-4 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 z-50">
           <Check className="w-5 h-5 text-emerald-400" />
@@ -366,7 +370,7 @@ const App = () => {
       )}
 
       <div className="max-w-7xl mx-auto">
-        
+
         <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b pb-6 border-slate-200 gap-4">
           <div className="flex items-center gap-3">
             <div className="bg-slate-900 p-3 rounded-xl shadow-sm">
@@ -380,14 +384,14 @@ const App = () => {
         </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          
+
           <div className="lg:col-span-4 space-y-4">
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
               <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
                 <Settings className="w-5 h-5 text-emerald-600" />
                 Configurações & Chaves
               </h2>
-              
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
@@ -431,7 +435,7 @@ const App = () => {
                 </div>
 
                 <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
-                  <button 
+                  <button
                     onClick={() => setShowAdvanced(!showAdvanced)}
                     className="w-full bg-slate-50 p-3 text-xs font-bold text-slate-600 flex justify-between items-center hover:bg-slate-100 transition-colors"
                   >
@@ -454,8 +458,8 @@ const App = () => {
 
                 <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 mt-4">
                   <label className="flex items-start gap-3 cursor-pointer">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="mt-1 w-4 h-4 text-emerald-600 rounded border-slate-300 focus:ring-emerald-500"
                       checked={useCorsProxy}
                       onChange={(e) => setUseCorsProxy(e.target.checked)}
@@ -472,18 +476,18 @@ const App = () => {
                   disabled={status === "fetching" || status === "analyzing" || !pipedriveToken || !dealId || !geminiKey}
                   className="w-full mt-6 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-medium py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
                 >
-                  {status === "fetching" ? <><Loader2 className="w-5 h-5 animate-spin" /> Extraindo...</> : 
-                   status === "analyzing" ? <><Cpu className="w-5 h-5 animate-pulse text-emerald-400" /> Analisando IA...</> : 
-                   <><Database className="w-5 h-5" /> Iniciar Inteligência</>}
+                  {status === "fetching" ? <><Loader2 className="w-5 h-5 animate-spin" /> Extraindo...</> :
+                    status === "analyzing" ? <><Cpu className="w-5 h-5 animate-pulse text-emerald-400" /> Analisando IA...</> :
+                      <><Database className="w-5 h-5" /> Iniciar Inteligência</>}
                 </button>
               </div>
             </div>
-            
+
             <p className="text-[10px] text-center text-slate-400 px-4">As credenciais são guardadas localmente no seu navegador. Nenhuma chave é enviada para servidores de terceiros além da Google e Pipedrive.</p>
           </div>
 
           <div className="lg:col-span-8">
-            
+
             {status === "idle" && (
               <div className="h-full min-h-[500px] flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-3xl p-12 text-center bg-white/50">
                 <Shield className="w-16 h-16 mb-4 text-slate-300" />
@@ -519,7 +523,7 @@ const App = () => {
 
             {status === "success" && analysis && (
               <div className="space-y-6">
-                
+
                 {hardMetrics && (
                   <div className="bg-slate-900 rounded-2xl p-4 flex flex-wrap gap-6 items-center justify-between text-white shadow-md">
                     <div className="flex items-center gap-4">
@@ -562,7 +566,7 @@ const App = () => {
                 {activeTab === 'estrategia' && (
                   <div className="space-y-6">
                     <div className="flex justify-end">
-                      <button 
+                      <button
                         onClick={generateCRMSummary}
                         className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-semibold py-2 px-4 rounded-lg flex items-center gap-2 text-sm transition-colors"
                       >
@@ -700,7 +704,7 @@ const App = () => {
 
                 {activeTab === 'prospeccao' && safeObj(analysis?.prospeccao) && (
                   <div className="space-y-6">
-                    
+
                     <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm">
                       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
                         <div>
@@ -709,18 +713,18 @@ const App = () => {
                           </h3>
                           <p className="text-sm text-blue-700">A IA gera um template para colar no email ou WhatsApp baseada na última trava.</p>
                         </div>
-                        <button 
+                        <button
                           onClick={handleGenerateEmail}
                           className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 text-sm shadow-md transition-all"
                         >
                           <Cpu className="w-4 h-4" /> Gerar Rascunho
                         </button>
                       </div>
-                      
+
                       {emailDraft && (
                         <div className="mt-4">
-                          <textarea 
-                            readOnly 
+                          <textarea
+                            readOnly
                             value={emailDraft}
                             className="w-full h-48 p-4 bg-white border border-blue-200 rounded-xl text-sm font-mono text-slate-700 focus:outline-none resize-none"
                           />
@@ -770,7 +774,7 @@ const App = () => {
                                 <span><span className="font-semibold">Participantes:</span> {reuniao.participantes}</span>
                               </p>
                               <p className="text-sm text-rose-700 bg-rose-50 p-3 rounded-lg border border-rose-100 mt-2">
-                                <span className="font-semibold text-rose-900 block mb-1">Motivo da Trava:</span> 
+                                <span className="font-semibold text-rose-900 block mb-1">Motivo da Trava:</span>
                                 {reuniao.motivo}
                               </p>
                             </div>
@@ -823,7 +827,7 @@ const App = () => {
 
                 {activeTab === 'participantes' && safeObj(analysis?.participantesMapa) && (
                   <div className="space-y-6">
-                    
+
                     {analysis?.participantesMapa?.alertaStakeholder?.existe && (
                       <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 rounded-2xl shadow-lg text-white flex items-start gap-4">
                         <AlertCircle className="w-10 h-10 flex-shrink-0 text-amber-100" />
