@@ -48,6 +48,7 @@ const App = () => {
   const [outboundTag, setOutboundTag] = useState(() => localStorage.getItem('outboundTag') || "Reunião 01");
   const [salesTag, setSalesTag] = useState(() => localStorage.getItem('salesTag') || "Reunião");
   const [dealId, setDealId] = useState("");
+  const [dealTitle, setDealTitle] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
@@ -222,6 +223,7 @@ const App = () => {
       });
 
       setRawExtractedData(compiledHistory);
+      setDealTitle(dealData.data.title);
       return compiledHistory;
 
     } catch (err) {
@@ -268,6 +270,12 @@ const App = () => {
     }
     const historyData = await fetchPipedriveData();
     if (historyData) await analyzeWithGemini(historyData);
+  };
+
+  const copyInsight = () => {
+    if (!analysis) return;
+    const text = `🔹 Resumo Executivo:\n${analysis.resumo}\n\n🔹 Principais Dores:\n${analysis.dores.join(', ')}\n\n🔹 Objeções ativas:\n${analysis.objecoes.join(', ')}\n\n🔹 Próximos Passos:\n${analysis.proximosPassos.join('\n')}`;
+    copyToClipboard(text);
   };
 
   // UI HELPERS
@@ -345,7 +353,6 @@ const App = () => {
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Relatórios IA</p>
             <SidebarIcon icon={LayoutDashboard} label="Dashboard" id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} />
             <SidebarIcon icon={Target} label="Inteligência" id="inteligencia" active={activeTab === 'inteligencia'} onClick={setActiveTab} />
-            <SidebarIcon icon={ShieldAlert} label="Zona de Perigo" id="perigo" active={activeTab === 'perigo'} onClick={setActiveTab} />
             <SidebarIcon icon={Search} label="Prospecção" id="prospeccao" active={activeTab === 'prospeccao'} onClick={setActiveTab} />
             <SidebarIcon icon={Users} label="Participantes" id="participantes" active={activeTab === 'participantes'} onClick={setActiveTab} />
           </div>
@@ -379,7 +386,10 @@ const App = () => {
               <span className="absolute top-2 right-2 w-2 h-2 bg-branddi-cyan rounded-full border-2 border-white"></span>
             </button>
             <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
-            <button className="flex items-center gap-2 bg-branddi-navy text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all shadow-md shadow-slate-200 active:scale-95 border border-branddi-cyan/20">
+            <button
+              onClick={copyInsight}
+              disabled={!analysis}
+              className="flex items-center gap-2 bg-branddi-navy text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all shadow-md shadow-slate-200 active:scale-95 border border-branddi-cyan/20 disabled:opacity-50 disabled:cursor-not-allowed">
               <Cpu size={16} />
               <span>Gerar Insight</span>
             </button>
@@ -547,7 +557,7 @@ const App = () => {
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-500 text-xs font-medium">Extraído em {new Date().toLocaleTimeString()}</span>
                   </div>
-                  <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Análise do Deal #{dealId}</h1>
+                  <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Análise do Negócio: {dealTitle} <span className="text-slate-400 text-xl font-medium block md:inline mt-1 md:mt-0">#{dealId}</span></h1>
                   <p className="text-slate-500 text-sm mt-1 flex items-center gap-1.5">
                     <Target size={14} className="text-branddi-cyan" />
                     Status do Algoritmo: <span className="text-emerald-600 font-bold">Processado com Sucesso</span>
@@ -674,7 +684,7 @@ const App = () => {
                       </div>
 
                       <div className="card p-6">
-                        <SectionTitle title="Pain Points Lapeados" subtitle="O que tira o sono do cliente." />
+                        <SectionTitle title="Dores do lead" subtitle="O que tira o sono do cliente." />
                         <div className="flex flex-wrap gap-2 mt-4">
                           {analysis.dores.map((dor, i) => (
                             <span key={i} className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold px-3 py-1.5 rounded-full uppercase transition-all hover:bg-white hover:border-orange-300 cursor-default">
@@ -703,29 +713,61 @@ const App = () => {
               {activeTab === 'inteligencia' && (
                 <div className="space-y-8 fade-in">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="card p-8">
-                      <SectionTitle title="Personas Envolvidas" subtitle="Quem manda no negócio." />
-                      <div className="space-y-4">
-                        {analysis.personas.map((p, i) => (
-                          <div key={i} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
-                            <div className="flex items-center gap-4">
-                              <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
-                                <User size={20} />
+                    <div className="space-y-8">
+                      <div className="card p-8">
+                        <SectionTitle title="Personas Envolvidas" subtitle="Quem manda no negócio." />
+                        <div className="space-y-4">
+                          {analysis.personas.map((p, i) => (
+                            <div key={i} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                              <div className="flex items-center gap-4">
+                                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                                  <User size={20} />
+                                </div>
+                                <div>
+                                  <p className="font-bold text-slate-800 leading-none">{p.nome || "Não definido"}</p>
+                                  <p className="text-xs text-slate-500 mt-1">{p.cargo}</p>
+                                </div>
                               </div>
-                              <div>
-                                <p className="font-bold text-slate-800 leading-none">{p.nome || "Não definido"}</p>
-                                <p className="text-xs text-slate-500 mt-1">{p.cargo}</p>
-                              </div>
+                              <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${p.engajamento === 'Alto' ? 'bg-emerald-100 text-emerald-700' : p.engajamento === 'Baixo' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
+                                {p.engajamento}
+                              </span>
                             </div>
-                            <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${p.engajamento === 'Alto' ? 'bg-emerald-100 text-emerald-700' : p.engajamento === 'Baixo' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
-                              {p.engajamento}
-                            </span>
-                          </div>
-                        ))}
+                          ))}
+                        </div>
+                      </div>
+
+                      <div className="card p-8 border-t-8 border-red-600">
+                        <SectionTitle title="Objeções ativas" subtitle="O que o cliente disse que não foi bem resolvido." />
+                        <div className="space-y-3 mt-4">
+                          {analysis.objecoesMalContornadas?.length > 0 ? analysis.objecoesMalContornadas.map((item, i) => (
+                            <div key={i} className="bg-red-50/50 p-4 rounded-xl border-l-4 border-red-500">
+                              <p className="text-sm font-bold text-red-800">{item.objecao}</p>
+                              <p className="text-xs text-red-600 mt-1">{item.motivo}</p>
+                            </div>
+                          )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma objeção ativa ou mal contornada.</p></div>}
+                        </div>
                       </div>
                     </div>
 
                     <div className="space-y-8">
+                      <div className="card p-8 border-t-8 border-orange-500">
+                        <SectionTitle title="Negativas Fortes" subtitle="Barreiras explícitas da prospecção." />
+                        <div className="space-y-3 mt-4">
+                          {analysis.prospeccao?.negativasFortes?.length > 0 ? analysis.prospeccao?.negativasFortes.map((item, i) => (
+                            <div key={i} className="bg-orange-50/50 p-4 rounded-xl border-l-4 border-orange-500">
+                              <p className="text-sm font-bold text-orange-800">{item.nome}</p>
+                              <p className="text-xs text-orange-600 mt-1">{item.motivo}</p>
+                            </div>
+                          )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma negativa forte levantada.</p></div>}
+                        </div>
+                        <div className="mt-8 pt-6 border-t border-slate-100">
+                          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Motivo Resumo de Estagnação</p>
+                          <div className="bg-slate-900 rounded-xl p-4 text-white text-sm font-bold">
+                            {analysis.prospeccao?.motivoNaoEvolucao || "Nenhum motivo claro identificado pela IA."}
+                          </div>
+                        </div>
+                      </div>
+
                       <div className="card p-8">
                         <SectionTitle title="Regra da Persona" subtitle="O card está associado à pessoa certa?" />
                         <div className={`mt-4 p-6 rounded-xl border-2 flex items-start gap-4 ${analysis.regraPersonaCumprida ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
@@ -745,43 +787,6 @@ const App = () => {
                               {err}
                             </div>
                           )) : <div className="text-sm p-3 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-2"><CheckCircle size={14} /> Gramática perfeita.</div>}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'perigo' && (
-                <div className="space-y-8 fade-in">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div className="card p-8 border-t-8 border-red-600">
-                      <SectionTitle title="Objeções Mal Contornadas" subtitle="O que o cliente disse que não foi bem respondido." />
-                      <div className="space-y-3 mt-4">
-                        {analysis.objecoesMalContornadas?.length > 0 ? analysis.objecoesMalContornadas.map((item, i) => (
-                          <div key={i} className="bg-red-50/50 p-4 rounded-xl border-l-4 border-red-500">
-                            <p className="text-sm font-bold text-red-800">{item.objecao}</p>
-                            <p className="text-xs text-red-600 mt-1">{item.motivo}</p>
-                          </div>
-                        )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma objeção mal contornada detectada.</p></div>}
-                      </div>
-                    </div>
-
-                    <div className="card p-8 border-t-8 border-orange-500">
-                      <SectionTitle title="Negativas Fortes" subtitle="Barreiras rígidas extraídas da prospecção." />
-                      <div className="space-y-3 mt-4">
-                        {analysis.prospeccao?.negativasFortes?.length > 0 ? analysis.prospeccao?.negativasFortes.map((item, i) => (
-                          <div key={i} className="bg-orange-50/50 p-4 rounded-xl border-l-4 border-orange-500">
-                            <p className="text-sm font-bold text-orange-800">{item.nome}</p>
-                            <p className="text-xs text-orange-600 mt-1">{item.motivo}</p>
-                          </div>
-                        )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma negativa forte levantada.</p></div>}
-                      </div>
-
-                      <div className="mt-8 pt-6 border-t border-slate-100">
-                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Motivo Resumo de Estagnação</p>
-                        <div className="bg-slate-900 rounded-xl p-4 text-white text-sm font-bold">
-                          {analysis.prospeccao?.motivoNaoEvolucao || "Nenhum motivo claro identificado pela IA."}
                         </div>
                       </div>
                     </div>
@@ -833,6 +838,29 @@ const App = () => {
               {/* TAB PARTICIPANTES */}
               {activeTab === 'participantes' && (
                 <div className="space-y-8 fade-in">
+                  {analysis.participantesMapa?.removerDoCard?.length > 0 && (
+                    <div className="card p-8 border-l-8 border-red-500 bg-red-50/30">
+                      <div className="flex items-center gap-4 mb-6">
+                        <div className="w-12 h-12 bg-red-100 text-red-600 rounded-xl flex items-center justify-center shadow-inner relative">
+                          <User size={24} className="text-red-500" />
+                          <span className="absolute top-1 right-2 text-xl font-black text-red-600">!</span>
+                        </div>
+                        <div>
+                          <h2 className="text-xl font-black text-red-800">Alerta de Desvinculação</h2>
+                          <p className="text-sm text-red-600">Pessoas mapeadas que não fazem mais parte da empresa e devem ser removidas.</p>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {analysis.participantesMapa.removerDoCard.map((item, i) => (
+                          <div key={i} className="bg-white p-4 rounded-xl border border-red-200 flex flex-col md:flex-row justify-between md:items-center gap-2">
+                            <span className="font-bold text-red-900 flex items-center gap-2"><AlertCircle size={16} /> {item.nome}</span>
+                            <span className="text-xs text-red-700 bg-red-100 px-3 py-1 rounded-full font-medium">{item.motivo}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="card p-8 border-l-8 border-orange-500">
                     <div className="flex items-center gap-4 mb-6">
                       <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center shadow-inner">
