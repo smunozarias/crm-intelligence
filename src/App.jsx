@@ -25,12 +25,19 @@ import {
   Check,
   Building,
   Folder,
-  Zap
+  Zap,
+  LayoutDashboard,
+  LogOut,
+  Bell,
+  Menu,
+  ChevronRight,
+  ExternalLink
 } from 'lucide-react';
 
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-2.0-flash";
 
 const App = () => {
+  // 1. CONFIGURATION STATES
   const [geminiKey, setGeminiKey] = useState(() => localStorage.getItem('geminiKey') || "");
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
   const [outboundTag, setOutboundTag] = useState(() => localStorage.getItem('outboundTag') || "Reunião 01");
@@ -38,16 +45,16 @@ const App = () => {
   const [dealId, setDealId] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
 
+  // Application States
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [analysis, setAnalysis] = useState(null);
   const [hardMetrics, setHardMetrics] = useState(null);
   const [rawExtractedData, setRawExtractedData] = useState("");
-  const [showRawData, setShowRawData] = useState(false);
-  const [activeTab, setActiveTab] = useState("estrategia");
+  const [activeTab, setActiveTab] = useState("config"); // Default to config
   const [toast, setToast] = useState(null);
-  const [emailDraft, setEmailDraft] = useState("");
 
+  // Save credentials to LocalStorage
   useEffect(() => {
     localStorage.setItem('geminiKey', geminiKey);
     localStorage.setItem('pipedriveToken', pipedriveToken);
@@ -132,7 +139,6 @@ const App = () => {
 
       while (moreItems) {
         const flowUrl = `/api/pipedrive/deals/${dealId}/flow?api_token=${pipedriveToken}&limit=100&start=${start}`;
-
         const flowRes = await fetch(flowUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
         if (!flowRes.ok) throw new Error("Erro ao buscar histórico.");
 
@@ -200,10 +206,10 @@ const App = () => {
       setStatus("analyzing");
 
       const systemPrompt = `
-      És um especialista em Operações de Vendas (SalesOps) e analista de CRM de topo.
+      És um especialista em Operações de Vendas (SalesOps) e analista de CRM de topo da Branddi.
       A tua tarefa é analisar o histórico bruto extraído via API de um negócio e extrair métricas de Estratégia e Qualidade.
       
-      CONTEXTO CRÍTICO (LEIA COM ATENÇÃO):
+      CONTEXTO CRÍTICO:
       O sistema calculou os dias exatos de estagnação. Se existirem muitas interações recentes nas notas ou atividades, o negócio ESTÁ QUENTE E ATIVO.
       
       ANÁLISE ESTRATÉGICA:
@@ -212,20 +218,12 @@ const App = () => {
       3. OBJEÇÕES: Barreiras ativas (não resolvidas).
       4. RESUMO EXECUTIVO: Resumo claro do momento atual do deal.
       5. SENTIMENTO: Apenas responde "Positivo", "Neutro" ou "Negativo".
-      6. PRÓXIMOS PASSOS SUGERIDOS (ESTRATÉGICOS): Ações práticas para a equipe fechar o negócio. IGNORE tarefas operacionais/checklists padrão.
-      7. SCORE (0 a 100): Se existe contato recente, negociação ou aprovação, o score NUNCA deve ser baixo.
+      6. PRÓXIMOS PASSOS SUGERIDOS: Ações práticas para fechar o negócio.
+      7. SCORE (0 a 100): Se existe contato recente, o score NUNCA deve ser baixo.
       
-      AUDITORIA DE QUALIDADE DE CRM E PROCESSOS:
-      8. REGRA DE HIGIENE SUPREMA: Colar todo o histórico de conversas do WhatsApp nas notas é o procedimento PADRÃO E CORRETO. NUNCA aponte como erro.
-      9. ERROS DE ORTOGRAFIA: Foca-te só nas notas do próprio vendedor.
-      10. OBJEÇÕES MAL CONTORNADAS: Objeções ignoradas.
-      11. REGRA DA PERSONA: A pessoa principal do card é quem está ativamente envolvida nas notas?
-      12. CONTAGEM ESTRITA DE REUNIÕES: Conta APENAS pelo "Tipo: [...]". Outbound = "[${outboundTag}]". Vendas = "[${salesTag}]".
-      
-      INTELIGÊNCIA DE PARTICIPANTES & PROSPECÇÃO:
-      13. ALERTA STAKEHOLDER: Procura menções a "stakeholder", defensor ou influenciador favorável à Branddi.
-      14. EMPRESA VS AGÊNCIA: Separa a equipe final do cliente (empresa) das agências de marketing.
-      15. HISTÓRICO DE REUNIÕES ESTAGNADAS: Liste reuniões passadas específicas que aconteceram, mas não geraram avanço. Extraia Data, Participantes e o Motivo.
+      AUDITORIA DE QUALIDADE:
+      8. REGRA DE HIGIENE: Colar histórico do WhatsApp é o procedimento PADRÃO. NUNCA aponte como erro.
+      9. CONTAGEM DE REUNIÕES: Conta APENAS pelo "Tipo: [...]". Outbound = "[${outboundTag}]". Vendas = "[${salesTag}]".
       `;
 
       const responseSchema = {
@@ -268,619 +266,609 @@ const App = () => {
         required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa"]
       };
 
-      let retryCount = 0;
-      const delays = [1000, 2000, 4000];
-      let result;
-
       const activeApiKey = geminiKey.trim();
-
-      while (retryCount < 3) {
-        try {
-          const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${activeApiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: `Analisa este histórico do CRM:\n\n${historyText}` }] }],
-              systemInstruction: { parts: [{ text: systemPrompt }] },
-              generationConfig: {
-                responseMimeType: "application/json",
-                responseSchema: responseSchema
-              }
-            })
-          });
-
-          if (!response.ok) {
-            throw new Error("Chave Gemini inválida. Por favor, verifique a sua chave no Google AI Studio.");
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${activeApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: `Analisa este histórico do CRM:\n\n${historyText}` }] }],
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: {
+            responseMimeType: "application/json",
+            responseSchema: responseSchema
           }
+        })
+      });
 
-          result = await response.json();
-          break;
-        } catch (e) {
-          if (retryCount === 2) throw e;
-          await new Promise(r => setTimeout(r, delays[retryCount]));
-          retryCount++;
-        }
-      }
+      if (!response.ok) throw new Error("Chave Gemini inválida ou limite excedido.");
 
+      const result = await response.json();
       let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
-      rawText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-      let parsedData;
-      try {
-        parsedData = JSON.parse(rawText);
-      } catch (e) {
-        throw new Error("A IA gerou um formato de dados inválido.");
-      }
+      const parsedData = JSON.parse(rawText.trim());
 
       setAnalysis(parsedData);
-      setEmailDraft("");
+      setActiveTab("dashboard");
       setStatus("success");
 
     } catch (err) {
-      console.error(err);
       setStatus("error");
-      setErrorMsg(err.message || "Falha na IA. Verifique a sua chave API do Gemini.");
+      setErrorMsg(err.message || "Falha na análise da IA.");
     }
   };
 
   const handleStartProcess = async () => {
     if (!pipedriveToken || !dealId || !geminiKey) {
-      setStatus("error");
-      setErrorMsg("Preencha a Chave do Gemini, a Chave do Pipedrive e o ID do Negócio.");
+      setActiveTab("config");
+      showToast("Preencha as configurações primeiro!");
       return;
     }
     const historyData = await fetchPipedriveData();
-    if (historyData) {
-      await analyzeWithGemini(historyData);
-    }
+    if (historyData) await analyzeWithGemini(historyData);
   };
 
-  const safeArray = (arr) => Array.isArray(arr) ? arr : [];
-  const safeObj = (obj) => typeof obj === 'object' && obj !== null ? obj : {};
+  // UI HELPERS
+  const SidebarIcon = ({ icon: Icon, label, id, active, onClick }) => (
+    <div
+      onClick={() => onClick(id)}
+      className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+    >
+      <Icon size={20} />
+      <span className="text-sm font-medium">{label}</span>
+    </div>
+  );
 
-  const generateCRMSummary = () => {
-    const text = `🤖 **Resumo Gerado por IA (Deal Intel)**\n\n📋 **Estado Atual:**\n${analysis?.resumo || ''}\n\n🎯 **Principais Dores:**\n${safeArray(analysis?.dores).map(d => `• ${d}`).join('\n')}\n\n🚧 **Objeções Identificadas:**\n${safeArray(analysis?.objecoes).map(o => `• ${o}`).join('\n')}\n\n✅ **Próximos Passos Sugeridos:**\n${safeArray(analysis?.proximosPassos).map((p, i) => `${i + 1}. ${p}`).join('\n')}\n`;
-    copyToClipboard(text);
-  };
-
-  const handleGenerateEmail = () => {
-    const prospeccao = safeObj(analysis?.prospeccao);
-    const pessoa = prospeccao?.ultimaPessoaEngajada?.nome || "Nome";
-    const trava = prospeccao?.motivoNaoEvolucao || "algumas prioridades da época";
-
-    const draft = `Assunto: Retomada de contato - Branddi\n\nOlá ${pessoa.split(' ')[0]}, tudo bem?\n\nEstou entrando em contato pois na nossa última interação, o avanço do projeto acabou pausando devido a ${trava.toLowerCase()}.\n\nGostaria de entender se esse cenário mudou na empresa e se faz sentido retomarmos nossa conversa para proteger a marca de vocês.\n\nFico à disposição para um papo rápido de 15 minutos na próxima semana.\n\nUm abraço,`;
-
-    setEmailDraft(draft);
-    copyToClipboard(draft);
-  };
+  const SectionTitle = ({ title, subtitle }) => (
+    <div className="mb-6 fade-in">
+      <h1 className="text-2xl font-bold text-slate-800 tracking-tight">{title}</h1>
+      <p className="text-slate-500 text-sm mt-1">{subtitle}</p>
+    </div>
+  );
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 p-4 md:p-8 font-sans relative">
-
-      {toast && (
-        <div className="fixed top-4 right-4 bg-slate-900 text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 z-50">
-          <Check className="w-5 h-5 text-emerald-400" />
-          <span className="font-medium text-sm">{toast}</span>
+    <div className="flex h-screen bg-slate-50 overflow-hidden">
+      {/* SIDEBAR */}
+      <aside className="w-64 bg-white border-r border-slate-200 flex flex-col z-20">
+        <div className="p-6 flex items-center gap-3">
+          <div className="w-10 h-10 bg-orange-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-orange-200">
+            <Zap size={24} fill="white" />
+          </div>
+          <div className="flex flex-col">
+            <span className="font-bold text-slate-800 leading-tight">Pipedrive</span>
+            <span className="text-xs font-semibold text-orange-600 uppercase tracking-widest">Intelligence</span>
+          </div>
         </div>
-      )}
 
-      <div className="max-w-7xl mx-auto">
+        <nav className="flex-1 px-4 py-4 space-y-1 overflow-y-auto">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 mb-2">Principal</p>
+          <SidebarIcon icon={Settings} label="Configurações" id="config" active={activeTab === 'config'} onClick={setActiveTab} />
 
-        <header className="flex flex-col md:flex-row md:items-center justify-between mb-8 border-b pb-6 border-slate-200 gap-4">
-          <div className="flex items-center gap-3">
-            <div className="bg-slate-900 p-3 rounded-xl shadow-sm">
-              <Database className="text-white w-7 h-7" />
+          <div className={`pt-4 ${!analysis ? 'opacity-40 pointer-events-none' : ''}`}>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider px-4 mb-2">Relatórios IA</p>
+            <SidebarIcon icon={LayoutDashboard} label="Dashboard" id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} />
+            <SidebarIcon icon={TrendingUp} label="Estratégia" id="estrategia" active={activeTab === 'estrategia'} onClick={setActiveTab} />
+            <SidebarIcon icon={Target} label="Qualidade" id="qualidade" active={activeTab === 'qualidade'} onClick={setActiveTab} />
+            <SidebarIcon icon={Search} label="Prospecção" id="prospeccao" active={activeTab === 'prospeccao'} onClick={setActiveTab} />
+            <SidebarIcon icon={Users} label="Participantes" id="participantes" active={activeTab === 'participantes'} onClick={setActiveTab} />
+          </div>
+        </nav>
+
+        <div className="p-4 border-t border-slate-100">
+          <div className="bg-slate-50 p-3 rounded-lg flex items-center gap-3 cursor-pointer hover:bg-slate-100 transition-colors">
+            <div className="w-8 h-8 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-700 font-bold text-xs">SM</div>
+            <div className="flex-1 overflow-hidden">
+              <p className="text-xs font-bold text-slate-700 truncate">S. Muñoz Arias</p>
+              <p className="text-[10px] text-slate-500 truncate">Branddi Ops</p>
             </div>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-slate-800">Deal Intel <span className="text-emerald-600">Enterprise</span></h1>
-              <p className="text-slate-500 text-sm">Operações de Vendas & Qualidade de CRM</p>
-            </div>
+          </div>
+        </div>
+      </aside>
+
+      {/* MAIN CONTENT */}
+      <main className="flex-1 flex flex-col relative overflow-hidden">
+        {/* TOP BAR */}
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10 shadow-sm shadow-slate-100/50">
+          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 w-96 max-w-full">
+            <Search size={18} className="text-slate-400" />
+            <input
+              placeholder="Buscar Negócios, Contatos ou Relatórios..."
+              className="bg-transparent border-none focus:outline-none text-sm w-full"
+            />
+          </div>
+          <div className="flex items-center gap-4">
+            <button className="p-2 text-slate-400 hover:text-slate-600 transition-colors relative">
+              <Bell size={20} />
+              <span className="absolute top-2 right-2 w-2 h-2 bg-orange-500 rounded-full border-2 border-white"></span>
+            </button>
+            <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
+            <button className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all shadow-md shadow-slate-200 active:scale-95">
+              <Cpu size={16} />
+              <span>Gerar Insight</span>
+            </button>
           </div>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* PAGE BODY */}
+        <div className="flex-1 overflow-y-auto p-8 relative">
 
-          <div className="lg:col-span-4 space-y-4">
-            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
-              <h2 className="text-lg font-semibold mb-6 flex items-center gap-2 border-b border-slate-100 pb-4">
-                <Settings className="w-5 h-5 text-emerald-600" />
-                Configurações & Chaves
-              </h2>
-
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
-                    Sua API Gemini Pessoal <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    className="w-full p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 transition-all text-sm bg-slate-50"
-                    placeholder="AIzaSy..."
-                    value={geminiKey}
-                    onChange={(e) => setGeminiKey(e.target.value)}
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">Crie a sua gratuitamente no Google AI Studio.</p>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 mt-4">
-                    Sua API Pipedrive <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="password"
-                    className="w-full p-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-emerald-500 transition-all text-sm bg-slate-50"
-                    placeholder="Token do CRM..."
-                    value={pipedriveToken}
-                    onChange={(e) => setPipedriveToken(e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-1 mt-4 text-emerald-700">ID do Negócio a Analisar</label>
-                  <div className="relative">
-                    <Hash className="absolute left-3 top-2.5 w-4 h-4 text-emerald-600" />
-                    <input
-                      type="text"
-                      className="w-full p-2.5 pl-9 rounded-lg border-2 border-emerald-200 focus:ring-2 focus:ring-emerald-500 transition-all font-bold text-slate-800"
-                      placeholder="Ex: 1245"
-                      value={dealId}
-                      onChange={(e) => setDealId(e.target.value.replace(/\D/g, ''))}
-                    />
-                  </div>
-                </div>
-
-                <div className="mt-4 border border-slate-200 rounded-lg overflow-hidden">
-                  <button
-                    onClick={() => setShowAdvanced(!showAdvanced)}
-                    className="w-full bg-slate-50 p-3 text-xs font-bold text-slate-600 flex justify-between items-center hover:bg-slate-100 transition-colors"
-                  >
-                    Parâmetros de Contagem (Tags)
-                    <span>{showAdvanced ? 'Ocultar' : 'Mostrar'}</span>
-                  </button>
-                  {showAdvanced && (
-                    <div className="p-4 bg-white space-y-3 text-sm border-t border-slate-200">
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1">Filtro para Reunião Outbound</label>
-                        <input type="text" value={outboundTag} onChange={e => setOutboundTag(e.target.value)} className="w-full p-1.5 border rounded border-slate-300" />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-slate-500 mb-1">Filtro para Reunião de Vendas</label>
-                        <input type="text" value={salesTag} onChange={e => setSalesTag(e.target.value)} className="w-full p-1.5 border rounded border-slate-300" />
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                <button
-                  onClick={handleStartProcess}
-                  disabled={status === "fetching" || status === "analyzing" || !pipedriveToken || !dealId || !geminiKey}
-                  className="w-full mt-6 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white font-medium py-3.5 px-6 rounded-xl flex items-center justify-center gap-2 transition-all shadow-md"
-                >
-                  {status === "fetching" ? <><Loader2 className="w-5 h-5 animate-spin" /> Extraindo...</> :
-                    status === "analyzing" ? <><Cpu className="w-5 h-5 animate-pulse text-emerald-400" /> Analisando IA...</> :
-                      <><Database className="w-5 h-5" /> Iniciar Inteligência</>}
-                </button>
-              </div>
+          {/* TOASTS */}
+          {toast && (
+            <div className="fixed bottom-8 right-8 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-in slide-in-from-bottom z-50">
+              <CheckCircle size={18} className="text-emerald-400" />
+              <span className="text-sm font-medium">{toast}</span>
             </div>
+          )}
 
-            <p className="text-[10px] text-center text-slate-400 px-4">As credenciais são guardadas localmente no seu navegador. Nenhuma chave é enviada para servidores de terceiros além da Google e Pipedrive.</p>
-          </div>
+          {/* CONFIG SECTION */}
+          {activeTab === 'config' && (
+            <div className="max-w-4xl mx-auto space-y-8 fade-in">
+              <SectionTitle title="Configuração da Inteligência" subtitle="Configure suas chaves e o negócio que deseja analisar no histórico Branddi." />
 
-          <div className="lg:col-span-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* KEYS CARD */}
+                <div className="card p-6">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center">
+                      <Shield size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800">Chaves de API</h3>
+                      <p className="text-xs text-slate-500">Credenciais para conexão Pipedrive e Gemini.</p>
+                    </div>
+                  </div>
 
-            {status === "idle" && (
-              <div className="h-full min-h-[500px] flex flex-col items-center justify-center border-2 border-dashed border-slate-300 rounded-3xl p-12 text-center bg-white/50">
-                <Shield className="w-16 h-16 mb-4 text-slate-300" />
-                <h3 className="text-lg font-medium text-slate-700 mb-2">Deal Intel Enterprise</h3>
-                <p className="text-sm text-slate-500 max-w-sm">
-                  Adicione sua chave pessoal do Gemini e do Pipedrive para carregar o Dashboard completo.
-                </p>
-              </div>
-            )}
-
-            {status === "error" && (
-              <div className="bg-red-50 border border-red-200 p-6 rounded-2xl text-red-700 flex flex-col items-center text-center">
-                <AlertCircle className="w-12 h-12 mb-3 text-red-400" />
-                <h3 className="font-bold text-lg mb-1">Aviso do Sistema</h3>
-                <p className="text-sm opacity-90">{errorMsg}</p>
-              </div>
-            )}
-
-            {(status === "fetching" || status === "analyzing") && (
-              <div className="h-full min-h-[500px] flex flex-col items-center justify-center rounded-3xl p-12 text-center bg-white shadow-sm border border-slate-100">
-                <div className="relative w-24 h-24 mb-8">
-                  <div className="absolute inset-0 border-4 border-slate-100 rounded-full"></div>
-                  <div className={`absolute inset-0 border-4 ${status === 'fetching' ? 'border-blue-500' : 'border-emerald-500'} rounded-full border-t-transparent animate-spin`}></div>
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    {status === 'fetching' ? <Database className="text-blue-500 w-8 h-8" /> : <Cpu className="text-emerald-500 w-8 h-8" />}
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Gemini Key</label>
+                      <input
+                        type="password"
+                        value={geminiKey}
+                        onChange={(e) => setGeminiKey(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                        placeholder="AlzaSy..."
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Pipedrive Token</label>
+                      <input
+                        type="password"
+                        value={pipedriveToken}
+                        onChange={(e) => setPipedriveToken(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-orange-500 outline-none transition-all"
+                        placeholder="Token do seu CRM"
+                      />
+                    </div>
                   </div>
                 </div>
-                <h3 className="text-xl font-bold text-slate-800 mb-2">
-                  {status === "fetching" ? "A extrair linha do tempo do Pipedrive..." : "Aplicando IA sob Regras Estritas..."}
-                </h3>
-              </div>
-            )}
 
-            {status === "success" && analysis && (
-              <div className="space-y-6">
+                {/* DEAL CARD */}
+                <div className="card p-6 border-2 border-orange-100">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-lg flex items-center justify-center">
+                      <LayoutDashboard size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-slate-800">Negócio Alvo</h3>
+                      <p className="text-xs text-slate-500">Qual ID deseja passar pelo crivo da IA?</p>
+                    </div>
+                  </div>
 
-                {hardMetrics && (
-                  <div className="bg-slate-900 rounded-2xl p-4 flex flex-wrap gap-6 items-center justify-between text-white shadow-md">
-                    <div className="flex items-center gap-4">
-                      <Clock className="w-8 h-8 text-emerald-400 opacity-80" />
-                      <div>
-                        <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Tempo de Vida</p>
-                        <p className="text-lg font-semibold">{hardMetrics.daysOpen} dias aberto</p>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Deal ID (Pipedrive)</label>
+                      <div className="relative">
+                        <Hash className="absolute left-3 top-2.5 text-orange-400" size={16} />
+                        <input
+                          type="text"
+                          value={dealId}
+                          onChange={(e) => setDealId(e.target.value)}
+                          className="w-full bg-white border-2 border-orange-100 rounded-lg pl-10 pr-4 py-2 text-sm font-bold text-orange-600 focus:border-orange-500 outline-none transition-all"
+                          placeholder="Ex: 10298"
+                        />
                       </div>
                     </div>
-                    <div className="h-8 w-px bg-slate-700 hidden sm:block"></div>
+
+                    <button
+                      onClick={handleStartProcess}
+                      disabled={status === 'fetching' || status === 'analyzing'}
+                      className="btn-primary w-full flex items-center justify-center gap-2"
+                    >
+                      {status === 'fetching' || status === 'analyzing' ? (
+                        <Loader2 className="animate-spin" size={20} />
+                      ) : (
+                        <Zap size={18} fill="white" />
+                      )}
+                      <span>Iniciar Inteligência Branddi</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* ADVANCED SETTINGS */}
+              <div className="card overflow-hidden">
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="w-full px-6 py-4 flex items-center justify-between text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <Settings size={18} className="text-slate-400" />
+                    <span className="font-semibold text-sm">Configurações Avançadas (Tags)</span>
+                  </div>
+                  <ChevronRight className={`transition-transform ${showAdvanced ? 'rotate-90' : ''}`} size={18} />
+                </button>
+
+                {showAdvanced && (
+                  <div className="p-6 bg-slate-50 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6 slide-in-from-top">
                     <div>
-                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Estagnação (Métrica Real)</p>
-                      <p className={`text-lg font-semibold ${hardMetrics.daysInactive > 14 ? 'text-rose-400' : 'text-emerald-400'}`}>
-                        {hardMetrics.daysInactive === 0 ? 'Ação Hoje' : `${hardMetrics.daysInactive} dias sem interação`}
-                      </p>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1 block">Tag Outbound (Prospecção)</label>
+                      <input
+                        value={outboundTag} onChange={(e) => setOutboundTag(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium outline-none"
+                      />
                     </div>
-                    <div className="h-8 w-px bg-slate-700 hidden sm:block"></div>
                     <div>
-                      <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">Volume</p>
-                      <p className="text-lg font-semibold">{hardMetrics.totalActions} atividades registradas</p>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1 block">Tag Vendas (Reunião)</label>
+                      <input
+                        value={salesTag} onChange={(e) => setSalesTag(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium outline-none"
+                      />
                     </div>
                   </div>
                 )}
+              </div>
 
-                <div className="flex flex-wrap border-b border-slate-200 mb-6 gap-x-6 gap-y-3">
-                  <button onClick={() => setActiveTab('estrategia')} className={`pb-3 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'estrategia' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                    <TrendingUp className="w-4 h-4" /> Estratégia Acionável
-                  </button>
-                  <button onClick={() => setActiveTab('qualidade')} className={`pb-3 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'qualidade' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                    <List className="w-4 h-4" /> Qualidade CRM
-                  </button>
-                  <button onClick={() => setActiveTab('prospeccao')} className={`pb-3 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'prospeccao' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                    <Target className="w-4 h-4" /> Prospecção & Resgate
-                  </button>
-                  <button onClick={() => setActiveTab('participantes')} className={`pb-3 font-medium text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'participantes' ? 'border-emerald-500 text-emerald-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
-                    <Users className="w-4 h-4" /> Participantes
-                  </button>
+              {/* ERROR STATE */}
+              {status === 'error' && (
+                <div className="bg-red-50 border border-red-200 p-4 rounded-xl flex items-start gap-4 animate-in slide-in-from-bottom">
+                  <div className="w-10 h-10 bg-red-100 text-red-600 rounded-lg flex items-center justify-center shrink-0">
+                    <AlertCircle size={24} />
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-red-800">Ops! Algo correu mal</h4>
+                    <p className="text-sm text-red-600 mt-1">{errorMsg}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* DASHBOARD RELATIVO AO NEGÓCIO */}
+          {activeTab !== 'config' && analysis && (
+            <div className="max-w-6xl mx-auto space-y-8 fade-in">
+
+              {/* HEADER DASHBOARD */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-8">
+                <div>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">Análise em tempo real</span>
+                    <span className="text-slate-300">•</span>
+                    <span className="text-slate-500 text-xs font-medium">Extraído em {new Date().toLocaleTimeString()}</span>
+                  </div>
+                  <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Análise do Deal #{dealId}</h1>
+                  <p className="text-slate-500 text-sm mt-1 flex items-center gap-1.5">
+                    <Target size={14} className="text-orange-500" />
+                    Status do Algoritmo: <span className="text-emerald-600 font-bold">Processado com Sucesso</span>
+                  </p>
                 </div>
 
-                {activeTab === 'estrategia' && (
-                  <div className="space-y-6">
-                    <div className="flex justify-end">
-                      <button
-                        onClick={generateCRMSummary}
-                        className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 font-semibold py-2 px-4 rounded-lg flex items-center gap-2 text-sm transition-colors"
-                      >
-                        <Copy className="w-4 h-4" /> Copiar Resumo para o CRM
-                      </button>
-                    </div>
+                <div className="flex gap-3">
+                  <button onClick={() => window.print()} className="bg-white border border-slate-200 p-2.5 rounded-lg text-slate-600 hover:bg-slate-50 shadow-sm transition-all active:scale-95">
+                    <LogOut size={18} className="rotate-270" />
+                  </button>
+                  <button onClick={() => copyToClipboard(rawExtractedData)} className="bg-white border border-slate-200 px-4 py-2.5 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-50 shadow-sm flex items-center gap-2 transition-all active:scale-95">
+                    <Copy size={16} />
+                    <span>Dados Brutos</span>
+                  </button>
+                  <button onClick={() => setActiveTab('config')} className="bg-white border border-slate-200 px-4 py-2.5 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-50 shadow-sm flex items-center gap-2 transition-all active:scale-95">
+                    <Settings size={16} />
+                    <span>Nova Análise</span>
+                  </button>
+                </div>
+              </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2">Prob. de Fecho</p>
-                        <span className="text-4xl font-black text-slate-800">{analysis?.score || 0}%</span>
-                      </div>
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center min-w-0 overflow-hidden">
-                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2 truncate">Sentimento Global</p>
-                        <span className={`text-2xl font-bold capitalize truncate block w-full ${String(analysis?.sentimento).toLowerCase().includes('positivo') ? 'text-emerald-600' : String(analysis?.sentimento).toLowerCase().includes('negativo') ? 'text-rose-600' : 'text-amber-500'}`}>
-                          {analysis?.sentimento || "Neutro"}
+              {/* DASHBOARD TAB */}
+              {activeTab === 'dashboard' && (
+                <div className="space-y-8 fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div className="card p-6 flex flex-col justify-between h-40">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Health Score</p>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className={`text-4xl font-black ${analysis.score > 70 ? 'text-emerald-600' : analysis.score > 40 ? 'text-orange-600' : 'text-red-600'}`}>
+                          {analysis.score}
                         </span>
+                        <span className="text-slate-300 font-bold">/100</span>
                       </div>
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex flex-col justify-center">
-                        <p className="text-xs text-slate-500 uppercase font-bold tracking-wider mb-2">Intervenientes</p>
-                        <span className="text-2xl font-bold text-slate-800">{safeArray(analysis?.personas).length}</span>
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 md:p-8 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-                      <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-50 rounded-bl-full -z-10"></div>
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2 text-lg">
-                        <MessageSquare className="w-5 h-5 text-emerald-600" /> Resumo Executivo
-                      </h3>
-                      <div className="text-slate-600 leading-relaxed text-sm whitespace-pre-line">
-                        {analysis?.resumo || "Resumo não disponível."}
+                      <div className="w-full bg-slate-100 h-2 rounded-full mt-4 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-1000 ${analysis.score > 70 ? 'bg-emerald-500' : analysis.score > 40 ? 'bg-orange-500' : 'bg-red-500'}`}
+                          style={{ width: `${analysis.score}%` }}
+                        ></div>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-amber-500" /> Dores Principais</h3>
-                        <ul className="space-y-3">
-                          {safeArray(analysis?.dores).map((d, i) => (
-                            <li key={i} className="text-sm text-slate-600 flex gap-3 items-start bg-amber-50/50 p-2 rounded-lg">
-                              <span className="text-amber-500 mt-0.5">•</span> {d}
-                            </li>
+                    <div className="card p-6 flex flex-col justify-between h-40">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sentimento</p>
+                      <div className="mt-2 flex items-center gap-3">
+                        {analysis.sentimento === 'Positivo' ? <Zap className="text-orange-500" size={32} fill="#f97316" /> : <MessageSquare size={32} className="text-slate-400" />}
+                        <span className="text-2xl font-black text-slate-800">{analysis.sentimento}</span>
+                      </div>
+                      <p className="text-[10px] text-slate-400 font-medium">Predição baseada em 100% das notas</p>
+                    </div>
+
+                    <div className="card p-6 flex flex-col justify-between h-40">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Dias Aberto</p>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-4xl font-black text-slate-800">{hardMetrics?.daysOpen}</span>
+                        <span className="text-slate-400 text-sm font-bold ml-1">DIAS</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-4">
+                        <TrendingUp size={14} className="text-slate-300" />
+                        <span className="text-[10px] font-bold text-slate-400">Pipeline Performance</span>
+                      </div>
+                    </div>
+
+                    <div className="card p-6 flex flex-col justify-between h-40 bg-slate-900 text-white border-none shadow-orange-200">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inatividade</p>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className={`text-4xl font-black ${hardMetrics?.daysInactive > 10 ? 'text-orange-400' : 'text-white'}`}>{hardMetrics?.daysInactive}</span>
+                        <span className="text-slate-500 text-sm font-bold ml-1">DIAS</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-4">
+                        <div className={`w-2 h-2 rounded-full ${hardMetrics?.daysInactive > 10 ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+                        <span className="text-[10px] font-bold text-slate-400">{hardMetrics?.daysInactive > 10 ? 'NEGÓCIO ESTAGNADO' : 'ENGANJAMENTO OK'}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="md:col-span-2 space-y-8">
+                      <div className="card p-8">
+                        <SectionTitle title="Resumo Executivo Branddi" subtitle="Insight gerado automaticamente para o Head de Vendas." />
+                        <div className="bg-slate-50 p-6 rounded-xl border-l-4 border-orange-500 italic text-slate-700 leading-relaxed relative">
+                          <MessageSquare className="absolute -top-3 -right-3 text-orange-200" size={40} />
+                          "{analysis.resumo}"
+                        </div>
+                      </div>
+
+                      <div className="card p-8 bg-gradient-to-br from-white to-orange-50/10">
+                        <SectionTitle title="Próximos Passos Sugeridos" subtitle="Ações prioritárias extraídas da inteligência de negociação." />
+                        <div className="space-y-4">
+                          {analysis.proximosPassos.map((step, i) => (
+                            <div key={i} className="flex items-center gap-4 bg-white p-4 rounded-xl shadow-sm border border-slate-100 hover:border-orange-200 transition-colors group">
+                              <div className="w-8 h-8 rounded-lg bg-orange-100 text-orange-600 flex items-center justify-center font-bold text-sm shrink-0 group-hover:bg-orange-600 group-hover:text-white transition-colors">
+                                {i + 1}
+                              </div>
+                              <span className="text-slate-700 font-medium text-sm">{step}</span>
+                            </div>
                           ))}
-                        </ul>
-                      </div>
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Shield className="w-5 h-5 text-rose-500" /> Objeções Ativas</h3>
-                        <ul className="space-y-3">
-                          {safeArray(analysis?.objecoes).map((o, i) => (
-                            <li key={i} className="text-sm text-slate-600 flex gap-3 items-start bg-rose-50/50 p-2 rounded-lg">
-                              <span className="text-rose-500 mt-0.5">•</span> {o}
-                            </li>
-                          ))}
-                        </ul>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="bg-emerald-900 p-8 rounded-3xl text-white shadow-xl relative overflow-hidden">
-                      <h3 className="font-bold mb-6 flex items-center gap-3 text-xl relative z-10">
-                        <CheckCircle className="w-6 h-6 text-emerald-400" /> Plano de Ação Estratégico
-                      </h3>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 relative z-10">
-                        {safeArray(analysis?.proximosPassos).map((step, i) => (
-                          <div key={i} className="flex gap-4 items-start bg-white/10 p-4 rounded-xl border border-white/20">
-                            <span className="bg-emerald-500 text-white font-bold rounded-lg w-8 h-8 flex items-center justify-center flex-shrink-0">{i + 1}</span>
-                            <p className="text-sm text-slate-100 leading-relaxed mt-1">{step}</p>
+                    <div className="space-y-8">
+                      <div className="card p-6">
+                        <SectionTitle title="Métricas de Reunião" subtitle="Contagem rigorosa Branddi." />
+                        <div className="space-y-4 mt-6">
+                          <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                            <div className="flex items-center gap-3">
+                              <Mail className="text-slate-400" size={18} />
+                              <span className="text-sm font-bold text-slate-600 uppercase tracking-tighter">Outbound ({outboundTag})</span>
+                            </div>
+                            <span className="text-2xl font-black text-slate-800">{analysis.reunioesOutbound}</span>
+                          </div>
+                          <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100">
+                            <div className="flex items-center gap-3">
+                              <Users className="text-orange-500" size={18} />
+                              <span className="text-sm font-bold text-orange-700 uppercase tracking-tighter">Vendas ({salesTag})</span>
+                            </div>
+                            <span className="text-2xl font-black text-orange-600">{analysis.reunioesVendas}</span>
+                          </div>
+                          <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase">Total Interações Brutal</span>
+                            <span className="text-lg font-black text-white">{hardMetrics?.totalActions}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="card p-6">
+                        <SectionTitle title="Pain Points Lapeados" subtitle="O que tira o sono do cliente." />
+                        <div className="flex flex-wrap gap-2 mt-4">
+                          {analysis.dores.map((dor, i) => (
+                            <span key={i} className="bg-slate-50 border border-slate-200 text-slate-600 text-[11px] font-bold px-3 py-1.5 rounded-full uppercase transition-all hover:bg-white hover:border-orange-300 cursor-default">
+                              {dor}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="mt-8">
+                          <p className="text-[11px] font-bold text-slate-400 uppercase border-b border-slate-100 pb-2 mb-4">Objeções Ativas</p>
+                          <div className="space-y-3">
+                            {analysis.objecoes.map((obj, i) => (
+                              <div key={i} className="flex items-start gap-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0"></div>
+                                <span className="text-xs text-slate-600 font-medium leading-tight">{obj}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TABS ESTRATEGIA, QUALIDADE ETC PODEM SER ADICIONADOS AQUI SEGUINDO O MESMO PADRAO */}
+              {activeTab === 'estrategia' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 fade-in">
+                  <div className="card p-8">
+                    <SectionTitle title="Personas Envolvidas" subtitle="Quem manda no negócio." />
+                    <div className="space-y-4">
+                      {analysis.personas.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between p-4 border border-slate-100 rounded-xl hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-4">
+                            <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                              <User size={20} />
+                            </div>
+                            <div>
+                              <p className="font-bold text-slate-800 leading-none">{p.nome || "Não definido"}</p>
+                              <p className="text-xs text-slate-500 mt-1">{p.cargo}</p>
+                            </div>
+                          </div>
+                          <span className={`text-[10px] font-bold px-3 py-1 rounded-full uppercase ${p.engajamento === 'Alto' ? 'bg-emerald-100 text-emerald-700' : p.engajamento === 'Baixo' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>
+                            {p.engajamento}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="card p-8">
+                    <SectionTitle title="Insights de Conversão" subtitle="Onde o deal pode travat." />
+                    <div className="space-y-6">
+                      <div>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3">Objeções Mal Contornadas</p>
+                        <div className="space-y-3">
+                          {analysis.objecoesMalContornadas?.length > 0 ? analysis.objecoesMalContornadas.map((item, i) => (
+                            <div key={i} className="bg-red-50/50 p-4 rounded-xl border-l-4 border-red-500">
+                              <p className="text-sm font-bold text-red-800">{item.objecao}</p>
+                              <p className="text-xs text-red-600 mt-1">{item.motivo}</p>
+                            </div>
+                          )) : <p className="text-sm text-slate-400">Nenhuma objeção mal contornada detectada.</p>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* OUTRAS TABS SEGUINDO O LAYOUT DE CARDS */}
+              {activeTab === 'qualidade' && (
+                <div className="space-y-8 fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="card p-8">
+                      <SectionTitle title="Erros de Ortografia/Clareza" subtitle="Foco nas notas do vendedor." />
+                      <div className="space-y-2 mt-4">
+                        {analysis.errosOrtografia?.length > 0 ? analysis.errosOrtografia.map((err, i) => (
+                          <div key={i} className="text-sm p-3 bg-red-50 text-red-700 rounded-lg flex items-center gap-2">
+                            <AlertCircle size={14} />
+                            {err}
+                          </div>
+                        )) : <div className="text-sm p-3 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-2"><CheckCircle size={14} /> Gramática perfeita.</div>}
+                      </div>
+                    </div>
+
+                    <div className="card p-8">
+                      <SectionTitle title="Regra da Persona" subtitle="O card está associado à pessoa certa?" />
+                      <div className={`mt-4 p-6 rounded-xl border-2 flex items-start gap-4 ${analysis.regraPersonaCumprida ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                        {analysis.regraPersonaCumprida ? <CheckCircle size={24} className="text-emerald-600 shrink-0" /> : <AlertCircle size={24} className="text-red-600 shrink-0" />}
+                        <div>
+                          <p className={`font-bold uppercase text-xs mb-1 ${analysis.regraPersonaCumprida ? 'text-emerald-700' : 'text-red-700'}`}>{analysis.regraPersonaCumprida ? 'Regra Cumprida' : 'Falha na Regra Persona'}</p>
+                          <p className="text-sm text-slate-700 leading-tight">{analysis.justificativaRegraPersona}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB PROSPECCAO */}
+              {activeTab === 'prospeccao' && (
+                <div className="space-y-8 fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                    <div className="card p-8 md:col-span-1">
+                      <SectionTitle title="Mapeamento de Conta" subtitle="Distribuição por área." />
+                      <div className="space-y-4">
+                        {analysis.prospeccao?.mapeamentoConta?.map((area, i) => (
+                          <div key={i} className="p-3 bg-slate-50 rounded-lg">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{area.area}</p>
+                            <p className="text-sm font-bold text-slate-700 mt-1">{area.pessoas.join(', ')}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="card p-8 md:col-span-2">
+                      <SectionTitle title="Histórico de Reuniões Estagnadas" subtitle="Reuniões que não moveram o ponteiro." />
+                      <table className="w-full text-left mt-4">
+                        <thead>
+                          <tr className="border-b border-slate-100">
+                            <th className="pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Data</th>
+                            <th className="pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Participantes</th>
+                            <th className="pb-3 text-[10px] font-bold text-slate-400 uppercase tracking-wider">Motivo de Estagnação</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-50">
+                          {analysis.prospeccao?.historicoReunioesEstagnadas?.map((re, i) => (
+                            <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                              <td className="py-4 text-xs font-bold text-slate-700">{re.data}</td>
+                              <td className="py-4 text-xs text-slate-600">{re.participantes}</td>
+                              <td className="py-4 text-xs text-red-600 font-medium italic">"{re.motivo}"</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB PARTICIPANTES */}
+              {activeTab === 'participantes' && (
+                <div className="space-y-8 fade-in">
+                  <div className="card p-8 border-l-8 border-orange-500">
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className="w-12 h-12 bg-orange-100 text-orange-600 rounded-xl flex items-center justify-center shadow-inner">
+                        <Zap size={24} fill="#f97316" className="text-orange-500" />
+                      </div>
+                      <div>
+                        <h2 className="text-xl font-black text-slate-800">Alerta de Stakeholder Decisivo</h2>
+                        <p className="text-sm text-slate-500">A IA detectou um tomador de decisão chave.</p>
+                      </div>
+                    </div>
+                    <div className="bg-slate-900 rounded-2xl p-6 text-white text-lg font-bold leading-tight">
+                      {analysis.participantesMapa?.alertaStakeholder?.existe ?
+                        analysis.participantesMapa.alertaStakeholder.contexto :
+                        "Nenhum stakeholder decisivo mapeado explicitamente."}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="card p-8">
+                      <SectionTitle title="Equipe da Empresa Cliente" subtitle="Decisores e influenciadores." />
+                      <div className="space-y-3">
+                        {analysis.participantesMapa?.equipeEmpresa?.map((e, i) => (
+                          <div key={i} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                            <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-400 shadow-sm">{e.nome?.charAt(0)}</div>
+                            <div>
+                              <p className="text-sm font-black text-slate-800">{e.nome}</p>
+                              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">{e.cargoInferido}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="card p-8">
+                      <SectionTitle title="Equipe da Agência Parceira" subtitle="Intermediários e implementadores." />
+                      <div className="space-y-3">
+                        {analysis.participantesMapa?.equipeAgencia?.map((e, i) => (
+                          <div key={i} className="flex items-center gap-4 p-4 bg-white rounded-xl border border-slate-100 shadow-sm">
+                            <div className="w-10 h-10 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">{e.nomeAgencia?.charAt(0)}</div>
+                            <div>
+                              <p className="text-sm font-black text-slate-800">{e.nome}</p>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{e.nomeAgencia}</p>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
+              )}
 
-                {activeTab === 'qualidade' && (
-                  <div className="space-y-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-                        <div className="bg-indigo-100 p-3 rounded-xl text-indigo-600"><Activity className="w-6 h-6" /></div>
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Reuniões Outbound</p>
-                          <p className="text-3xl font-black text-slate-800">{analysis?.reunioesOutbound || 0}</p>
-                        </div>
-                      </div>
-                      <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm flex items-center gap-4">
-                        <div className="bg-emerald-100 p-3 rounded-xl text-emerald-600"><Calendar className="w-6 h-6" /></div>
-                        <div>
-                          <p className="text-xs text-slate-500 uppercase font-bold tracking-wider">Reuniões de Vendas</p>
-                          <p className="text-3xl font-black text-slate-800">{analysis?.reunioesVendas || 0}</p>
-                        </div>
-                      </div>
-                    </div>
+            </div>
+          )}
 
-                    <div className={`p-6 rounded-2xl border shadow-sm ${analysis?.regraPersonaCumprida ? 'bg-emerald-50 border-emerald-200' : 'bg-rose-50 border-rose-200'}`}>
-                      <h3 className={`font-bold mb-2 flex items-center gap-2 ${analysis?.regraPersonaCumprida ? 'text-emerald-800' : 'text-rose-800'}`}>
-                        {analysis?.regraPersonaCumprida ? <CheckCircle className="w-5 h-5" /> : <AlertCircle className="w-5 h-5" />}
-                        Auditoria: Regra da Persona Principal
-                      </h3>
-                      <p className={`text-sm ${analysis?.regraPersonaCumprida ? 'text-emerald-700' : 'text-rose-700'}`}>{analysis?.justificativaRegraPersona}</p>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-rose-500" /> Objeções Mal Contornadas</h3>
-                        {safeArray(analysis?.objecoesMalContornadas).length > 0 ? (
-                          <div className="space-y-4">
-                            {safeArray(analysis?.objecoesMalContornadas).map((item, i) => (
-                              <div key={i} className="bg-rose-50 p-3 rounded-xl border border-rose-100">
-                                <p className="text-sm font-semibold text-rose-900 mb-1">"{item.objecao}"</p>
-                                <p className="text-xs text-rose-700"><span className="font-bold">Falha:</span> {item.motivo}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-500 italic">Nenhuma falha grave encontrada nas respostas.</p>
-                        )}
-                      </div>
-
-                      <div className="space-y-6">
-                        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                          <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-amber-500" /> Falhas de Preenchimento</h3>
-                          {safeArray(analysis?.falhasPreenchimento).length > 0 ? (
-                            <ul className="space-y-2">
-                              {safeArray(analysis?.falhasPreenchimento).map((falha, i) => (
-                                <li key={i} className="text-sm text-slate-600 flex gap-2"><span className="text-amber-500">•</span> {falha}</li>
-                              ))}
-                            </ul>
-                          ) : (
-                            <p className="text-sm text-slate-500 italic">Preenchimento adequado.</p>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'prospeccao' && safeObj(analysis?.prospeccao) && (
-                  <div className="space-y-6">
-
-                    <div className="bg-blue-50 border border-blue-200 rounded-2xl p-6 shadow-sm">
-                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                        <div>
-                          <h3 className="font-bold text-blue-900 flex items-center gap-2 text-lg">
-                            <Mail className="w-5 h-5" /> Ação de Resgate
-                          </h3>
-                          <p className="text-sm text-blue-700">A IA gera um template para colar no email ou WhatsApp baseada na última trava.</p>
-                        </div>
-                        <button
-                          onClick={handleGenerateEmail}
-                          className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center gap-2 text-sm shadow-md transition-all"
-                        >
-                          <Cpu className="w-4 h-4" /> Gerar Rascunho
-                        </button>
-                      </div>
-
-                      {emailDraft && (
-                        <div className="mt-4">
-                          <textarea
-                            readOnly
-                            value={emailDraft}
-                            className="w-full h-48 p-4 bg-white border border-blue-200 rounded-xl text-sm font-mono text-slate-700 focus:outline-none resize-none"
-                          />
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm relative overflow-hidden">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><User className="w-5 h-5 text-indigo-500" /> Última Pessoa Engajada</h3>
-                        {analysis?.prospeccao?.ultimaPessoaEngajada?.nome ? (
-                          <div>
-                            <p className="text-lg font-bold text-indigo-900 mb-2">{analysis.prospeccao.ultimaPessoaEngajada.nome}</p>
-                            <p className="text-sm text-slate-600 bg-indigo-50/50 p-3 rounded-lg border border-indigo-100">
-                              <span className="font-semibold block mb-1 text-indigo-800">Contexto:</span> {analysis.prospeccao.ultimaPessoaEngajada.contexto}
-                            </p>
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-500 italic">Nenhum engajamento recente detectado.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-amber-500" /> Motivo Geral de Não Evolução</h3>
-                        {analysis?.prospeccao?.motivoNaoEvolucao ? (
-                          <div className="bg-amber-50 p-4 rounded-xl border border-amber-100"><p className="text-sm text-amber-900">{analysis.prospeccao.motivoNaoEvolucao}</p></div>
-                        ) : (
-                          <p className="text-sm text-slate-500 italic">Nenhum congelamento aparente.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                      <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><History className="w-5 h-5 text-slate-600" /> Reuniões Passadas Sem Avanço</h3>
-                      {safeArray(analysis?.prospeccao?.historicoReunioesEstagnadas).length > 0 ? (
-                        <div className="space-y-4">
-                          {safeArray(analysis.prospeccao.historicoReunioesEstagnadas).map((reuniao, i) => (
-                            <div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-200 relative">
-                              <div className="absolute top-4 right-4 bg-slate-200 text-slate-600 text-[10px] font-bold px-2 py-1 rounded-full uppercase tracking-wider">
-                                Não avançou
-                              </div>
-                              <p className="font-bold text-slate-800 text-sm mb-2 flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-slate-400" /> {reuniao.data}
-                              </p>
-                              <p className="text-xs text-slate-600 mb-2 flex items-start gap-2">
-                                <Users className="w-4 h-4 text-slate-400 flex-shrink-0" />
-                                <span><span className="font-semibold">Participantes:</span> {reuniao.participantes}</span>
-                              </p>
-                              <p className="text-sm text-rose-700 bg-rose-50 p-3 rounded-lg border border-rose-100 mt-2">
-                                <span className="font-semibold text-rose-900 block mb-1">Motivo da Trava:</span>
-                                {reuniao.motivo}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-slate-500 italic">Não foram encontradas reuniões específicas no histórico que tenham estagnado.</p>
-                      )}
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-rose-50 p-6 rounded-2xl border border-rose-200 shadow-sm">
-                        <h3 className="font-bold text-rose-900 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5 text-rose-600" /> Zonas de Perigo</h3>
-                        {safeArray(analysis?.prospeccao?.negativasFortes).length > 0 ? (
-                          <div className="space-y-3">
-                            {safeArray(analysis.prospeccao.negativasFortes).map((item, i) => (
-                              <div key={i} className="bg-white p-3 rounded-xl border border-rose-100 shadow-sm">
-                                <p className="font-bold text-rose-800 text-sm mb-1">{item.nome}</p>
-                                <p className="text-xs text-rose-600">{item.motivo}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-emerald-700 font-medium">Conta segura, sem negativas graves.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-slate-900 p-6 rounded-2xl border border-slate-800 shadow-sm text-white">
-                        <h3 className="font-bold text-white mb-5 flex items-center gap-2"><Target className="w-5 h-5 text-emerald-400" /> Mapeamento da Conta</h3>
-                        {safeArray(analysis?.prospeccao?.mapeamentoConta).length > 0 ? (
-                          <div className="space-y-4">
-                            {safeArray(analysis.prospeccao.mapeamentoConta).map((area, i) => (
-                              <div key={i} className="border-l-2 border-emerald-500 pl-4">
-                                <p className="text-sm font-bold text-emerald-300 uppercase tracking-wider mb-2">{area.area}</p>
-                                <div className="flex flex-wrap gap-2">
-                                  {safeArray(area.pessoas).map((pessoa, j) => (
-                                    <span key={j} className="bg-slate-800 border border-slate-700 text-slate-200 text-xs px-2.5 py-1 rounded-full">{pessoa}</span>
-                                  ))}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-400 italic">Sem mapeamento suficiente.</p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'participantes' && safeObj(analysis?.participantesMapa) && (
-                  <div className="space-y-6">
-
-                    {analysis?.participantesMapa?.alertaStakeholder?.existe && (
-                      <div className="bg-gradient-to-r from-amber-500 to-orange-600 p-6 rounded-2xl shadow-lg text-white flex items-start gap-4">
-                        <AlertCircle className="w-10 h-10 flex-shrink-0 text-amber-100" />
-                        <div>
-                          <h3 className="text-xl font-bold mb-2">ALERTA DE STAKEHOLDER IDENTIFICADO!</h3>
-                          <p className="mt-3 text-sm bg-black/20 p-3 rounded-lg border border-white/10"><span className="font-bold">Contexto:</span> {analysis.participantesMapa.alertaStakeholder.contexto}</p>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Building className="w-5 h-5 text-indigo-500" /> Equipe Interna (Cliente)</h3>
-                        {safeArray(analysis?.participantesMapa?.equipeEmpresa).length > 0 ? (
-                          <div className="space-y-3">
-                            {safeArray(analysis.participantesMapa.equipeEmpresa).map((p, i) => (
-                              <div key={i} className="flex flex-col p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                <p className="font-bold text-slate-800 text-sm">{p.nome}</p>
-                                <p className="text-xs text-slate-500 font-mono mt-1">{p.email || "Sem email"}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-500 italic">Nenhum participante identificado.</p>
-                        )}
-                      </div>
-
-                      <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-                        <h3 className="font-bold text-slate-800 mb-4 flex items-center gap-2"><Folder className="w-5 h-5 text-emerald-500" /> Agências / Terceiros</h3>
-                        {safeArray(analysis?.participantesMapa?.equipeAgencia).length > 0 ? (
-                          <div className="space-y-3">
-                            {safeArray(analysis.participantesMapa.equipeAgencia).map((p, i) => (
-                              <div key={i} className="flex flex-col p-3 bg-slate-50 rounded-xl border border-slate-100">
-                                <div className="flex justify-between">
-                                  <p className="font-bold text-slate-800 text-sm">{p.nome}</p>
-                                  <span className="text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">{p.nomeAgencia}</span>
-                                </div>
-                                <p className="text-xs text-slate-500 font-mono mt-1">{p.email || "Sem email"}</p>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-sm text-slate-500 italic">Nenhuma agência identificada.</p>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="bg-white p-6 rounded-2xl border border-rose-200 shadow-sm">
-                      <h3 className="font-bold text-rose-800 mb-4 flex items-center gap-2"><User className="w-5 h-5 text-rose-500" /> A Remover do Card</h3>
-                      {safeArray(analysis?.participantesMapa?.removerDoCard).length > 0 ? (
-                        <div className="space-y-3">
-                          {safeArray(analysis.participantesMapa.removerDoCard).map((p, i) => (
-                            <div key={i} className="flex items-start gap-3 bg-rose-50 p-3 rounded-xl border border-rose-100">
-                              <AlertCircle className="w-5 h-5 text-rose-500 flex-shrink-0 mt-0.5" />
-                              <div>
-                                <p className="font-bold text-rose-900 text-sm">{p.nome}</p>
-                                <p className="text-xs text-rose-700 mt-1"><span className="font-semibold">Motivo:</span> {p.motivo}</p>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <p className="text-sm text-emerald-600 bg-emerald-50 p-3 rounded-lg">Todos parecem ativos.</p>
-                      )}
-                    </div>
-
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
