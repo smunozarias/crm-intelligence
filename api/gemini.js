@@ -11,25 +11,28 @@ export default async function handler(req, res) {
   }
 
   const systemPrompt = `
-      És um especialista em Operações de Vendas (SalesOps) e analista de CRM de topo da Branddi.
-      A tua tarefa é analisar o histórico bruto extraído via API de um negócio e extrair métricas de Estratégia e Qualidade.
-      
-      CONTEXTO CRÍTICO:
-      O sistema calculou os dias exatos de estagnação. Se existirem muitas interações recentes nas notas ou atividades, o negócio ESTÁ QUENTE E ATIVO.
-      
-      ANÁLISE ESTRATÉGICA:
-      1. PERSONAS ENVOLVIDAS: Nome, cargo e nível de engajamento real.
-      2. PONTOS DE DOR (PAIN POINTS): O que o cliente quer resolver.
-      3. OBJEÇÕES: Barreiras ativas (não resolvidas).
-      4. RESUMO EXECUTIVO: Resumo claro do momento atual do deal.
-      5. SENTIMENTO: Apenas responde "Positivo", "Neutro" ou "Negativo".
-      6. PRÓXIMOS PASSOS SUGERIDOS: Ações práticas para fechar o negócio.
-      7. SCORE (0 a 100): Se existe contato recente, o score NUNCA deve ser baixo.
-      
-      AUDITORIA DE QUALIDADE:
-      8. REGRA DE HIGIENE: Colar histórico do WhatsApp é o procedimento PADRÃO. NUNCA aponte como erro.
-      9. CONTAGEM DE REUNIÕES: Conta APENAS pelo "Tipo: [...]". (O modelo usará tags passadas ou predefinidas se omitidas).
-      `;
+        És um especialista em Operações de Vendas (SalesOps) e analista de CRM de topo da Branddi.
+        A tua tarefa é analisar o histórico bruto extraído via API de um negócio e extrair métricas de Estratégia e Qualidade.
+        
+        CONTEXTO CRÍTICO:
+        O sistema calculou os dias exatos de estagnação. Se existirem muitas interações recentes nas notas ou atividades, o negócio ESTÁ QUENTE E ATIVO.
+        
+        ANÁLISE ESTRATÉGICA:
+        1. PERSONAS ENVOLVIDAS: Nome, cargo e nível de engajamento real.
+        2. REGRA DE PERSONA: A validação só é cumprida se a "Persona Principal" do negócio for EXATAMENTE o contato que respondeu pela última vez ou que concentra o maior volume de comunicação recente. O vendedor precisa falar com quem interage.
+        3. PONTOS DE DOR (PAIN POINTS) / DORES DO LEAD: O que o cliente quer resolver.
+        4. OBJEÇÕES ATIVAS: Barreiras relatadas (não resolvidas).
+        5. RESUMO EXECUTIVO: Resumo claro do momento atual do deal.
+        6. SENTIMENTO: Apenas responde "Positivo", "Neutro" ou "Negativo".
+        7. PRÓXIMOS PASSOS SUGERIDOS: Ações práticas para fechar o negócio.
+        8. SCORE (0 a 100): Se existe contato recente, o score NUNCA deve ser baixo.
+        
+        AUDITORIA DE QUALIDADE DE VENDAS E PROSPECÇÃO:
+        9. REGRA DE HIGIENE: Colar histórico do WhatsApp é o procedimento PADRÃO. NUNCA aponte como erro.
+        10. ORTOGRAFIA E GRAMÁTICA: Audite os textos escritos pelo vendedor nas notas, apontando erros ortográficos ou gramaticais estruturais.
+        11. PRIORIDADE DE CONTATO: Liste pessoas fundamentais para o vendedor retomar o engajamento rápido, em ordem de importância.
+        12. CONTATOS A EVITAR: Pessoas que devem ser ignoradas (detratores, ex-funcionários, bloqueadores não engajados).
+        `;
 
   const responseSchema = {
     type: "OBJECT",
@@ -51,6 +54,8 @@ export default async function handler(req, res) {
       prospeccao: {
         type: "OBJECT",
         properties: {
+          listaPrioridadeContato: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, contexto: { type: "STRING" } } } },
+          contatosEvitar: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, motivo: { type: "STRING" } } } },
           ultimaPessoaEngajada: { type: "OBJECT", properties: { nome: { type: "STRING" }, contexto: { type: "STRING" } } },
           motivoNaoEvolucao: { type: "STRING" },
           negativasFortes: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, motivo: { type: "STRING" } } } },

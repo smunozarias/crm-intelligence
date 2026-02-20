@@ -131,7 +131,15 @@ const App = () => {
     });
 
     const daysInactive = Math.floor((today - maxActionDate) / (1000 * 3600 * 24));
-    const totalActions = flowItems.length;
+
+    const totalActions = flowItems.filter(item => {
+      if (item.object === 'mailThread' || item.object === 'mailMessage') return true;
+      if (item.object === 'activity') {
+        const t = (item.data?.type || '').toLowerCase();
+        return ['call', 'email', 'meeting', 'task', 'linkedin', 'whatsapp', 'ligação'].some(k => t.includes(k));
+      }
+      return false;
+    }).length;
 
     const metrics = {
       daysOpen: Math.max(0, daysOpen),
@@ -557,7 +565,7 @@ const App = () => {
                     <span className="text-slate-300">•</span>
                     <span className="text-slate-500 text-xs font-medium">Extraído em {new Date().toLocaleTimeString()}</span>
                   </div>
-                  <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">Análise do Negócio: {dealTitle} <span className="text-slate-400 text-xl font-medium block md:inline mt-1 md:mt-0">#{dealId}</span></h1>
+                  <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">{dealTitle} <span className="text-slate-400 text-xl font-medium block md:inline mt-1 md:mt-0">#{dealId}</span></h1>
                   <p className="text-slate-500 text-sm mt-1 flex items-center gap-1.5">
                     <Target size={14} className="text-branddi-cyan" />
                     Status do Algoritmo: <span className="text-emerald-600 font-bold">Processado com Sucesso</span>
@@ -582,7 +590,7 @@ const App = () => {
               {/* DASHBOARD TAB */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-8 fade-in">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                     <div className="card p-6 flex flex-col justify-between h-40">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Health Score</p>
                       <div className="mt-2 flex items-baseline gap-1">
@@ -628,7 +636,19 @@ const App = () => {
                       </div>
                       <div className="flex items-center gap-1.5 mt-4">
                         <div className={`w-2 h-2 rounded-full ${hardMetrics?.daysInactive > 10 ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                        <span className="text-[10px] font-bold text-slate-400">{hardMetrics?.daysInactive > 10 ? 'NEGÓCIO ESTAGNADO' : 'ENGANJAMENTO OK'}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{hardMetrics?.daysInactive > 10 ? 'ESTAGNADO' : 'ENGANJAM. OK'}</span>
+                      </div>
+                    </div>
+
+                    <div className="card p-6 flex flex-col justify-between h-40 bg-branddi-cyan/10 border-branddi-cyan/20">
+                      <p className="text-xs font-bold text-branddi-navy uppercase tracking-wider">Interações Reais</p>
+                      <div className="mt-2 flex items-baseline gap-1">
+                        <span className="text-4xl font-black text-branddi-navy">{hardMetrics?.totalActions}</span>
+                        <span className="text-branddi-navy/60 text-sm font-bold ml-1">AÇÕES</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-4">
+                        <Activity size={14} className="text-branddi-navy/60" />
+                        <span className="text-[10px] font-bold text-branddi-navy/80">E-mails, LinkedIn, WPP e Ligs</span>
                       </div>
                     </div>
                   </div>
@@ -675,10 +695,6 @@ const App = () => {
                               <span className="text-sm font-bold text-orange-700 uppercase tracking-tighter">Vendas ({salesTag})</span>
                             </div>
                             <span className="text-2xl font-black text-orange-600">{analysis.reunioesVendas}</span>
-                          </div>
-                          <div className="p-4 bg-slate-900 rounded-xl flex items-center justify-between">
-                            <span className="text-[10px] font-bold text-slate-400 uppercase">Total Interações Brutal</span>
-                            <span className="text-lg font-black text-white">{hardMetrics?.totalActions}</span>
                           </div>
                         </div>
                       </div>
@@ -779,16 +795,6 @@ const App = () => {
                         </div>
                       </div>
 
-                      <div className="card p-8">
-                        <SectionTitle title="Erros de Ortografia/Clareza" subtitle="Foco nas notas do vendedor." />
-                        <div className="space-y-2 mt-4">
-                          {analysis.errosOrtografia?.length > 0 ? analysis.errosOrtografia.map((err, i) => (
-                            <div key={i} className="text-sm p-3 bg-slate-50 text-slate-700 rounded-lg flex items-center gap-2">
-                              {err}
-                            </div>
-                          )) : <div className="text-sm p-3 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-2"><CheckCircle size={14} /> Gramática perfeita.</div>}
-                        </div>
-                      </div>
                     </div>
                   </div>
                 </div>
@@ -797,6 +803,35 @@ const App = () => {
               {/* TAB PROSPECCAO */}
               {activeTab === 'prospeccao' && (
                 <div className="space-y-8 fade-in">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="card p-8 border-l-8 border-emerald-500">
+                      <SectionTitle title="Mapeamento de Prioridade de Contato" subtitle="Quem o vendedor deve focar agora." />
+                      <div className="space-y-3 mt-4">
+                        {analysis.prospeccao?.listaPrioridadeContato?.length > 0 ? analysis.prospeccao.listaPrioridadeContato.map((item, i) => (
+                          <div key={i} className="bg-emerald-50/50 p-4 rounded-xl border border-emerald-100 flex items-start gap-4">
+                            <div className="bg-emerald-500 text-white w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs shrink-0">{i + 1}</div>
+                            <div>
+                              <p className="font-bold text-emerald-900">{item.nome}</p>
+                              <p className="text-xs text-emerald-700 mt-1">{item.contexto}</p>
+                            </div>
+                          </div>
+                        )) : <div className="p-4 bg-slate-50 rounded-xl"><p className="text-sm text-slate-500">Nenhum contato prioritário identificado.</p></div>}
+                      </div>
+                    </div>
+
+                    <div className="card p-8 border-l-8 border-slate-300">
+                      <SectionTitle title="Contatos a Evitar (Blocklist)" subtitle="Pessoas que bloqueiam ou não devem ser contatadas." />
+                      <div className="space-y-3 mt-4">
+                        {analysis.prospeccao?.contatosEvitar?.length > 0 ? analysis.prospeccao.contatosEvitar.map((item, i) => (
+                          <div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
+                            <p className="font-bold text-slate-700">{item.nome}</p>
+                            <p className="text-xs text-slate-500 mt-1">{item.motivo}</p>
+                          </div>
+                        )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhum bloqueador identificado no momento.</p></div>}
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <div className="card p-8 md:col-span-1">
                       <SectionTitle title="Mapeamento de Conta" subtitle="Distribuição por área." />
@@ -830,6 +865,17 @@ const App = () => {
                           ))}
                         </tbody>
                       </table>
+                    </div>
+                  </div>
+
+                  <div className="card p-8">
+                    <SectionTitle title="Auditoria de Comunicação (Ortografia e Gramática)" subtitle="Foco nas notas e e-mails do vendedor." />
+                    <div className="space-y-2 mt-4">
+                      {analysis.errosOrtografia?.length > 0 ? analysis.errosOrtografia.map((err, i) => (
+                        <div key={i} className="text-sm p-3 bg-slate-50 text-slate-700 rounded-lg flex items-center gap-2">
+                          {err}
+                        </div>
+                      )) : <div className="text-sm p-3 bg-emerald-50 text-emerald-700 rounded-lg flex items-center gap-2"><CheckCircle size={14} /> Comunicação impecável identificada.</div>}
                     </div>
                   </div>
                 </div>
