@@ -32,7 +32,8 @@ import {
   Menu,
   ChevronRight,
   ExternalLink,
-  ShieldAlert
+  ShieldAlert,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
