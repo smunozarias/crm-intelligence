@@ -1,13 +1,17 @@
-export default async function handler(req, res) {
+export const config = {
+  runtime: 'edge', // Using Edge Runtime to bypass normal serverless function timeouts
+};
+
+export default async function handler(req) {
   if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
+    return new Response(JSON.stringify({ error: 'Method Not Allowed' }), { status: 405, headers: { 'Content-Type': 'application/json' } });
   }
 
-  const { historyText, model } = req.body;
+  const { historyText, model } = await req.json();
   const activeApiKey = process.env.GEMINI_API_KEY;
 
   if (!activeApiKey) {
-    return res.status(500).json({ error: 'GEMINI_API_KEY is not configured on the server.' });
+    return new Response(JSON.stringify({ error: 'GEMINI_API_KEY is not configured on the server.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 
   const systemPrompt = `
@@ -94,14 +98,14 @@ export default async function handler(req, res) {
 
     if (!geminiRes.ok) {
       const errorData = await geminiRes.json();
-      return res.status(geminiRes.status).json({ error: errorData.error?.message || "Erro na API Gemini" });
+      return new Response(JSON.stringify({ error: errorData.error?.message || "Erro na API Gemini" }), { status: geminiRes.status, headers: { 'Content-Type': 'application/json' } });
     }
 
     const result = await geminiRes.json();
-    return res.status(200).json(result);
+    return new Response(JSON.stringify(result), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ error: 'Erro interno do servidor ao conectar com o Gemini.' });
+    return new Response(JSON.stringify({ error: 'Erro interno do servidor ao conectar com o Gemini.' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
   }
 }

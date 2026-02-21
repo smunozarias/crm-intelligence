@@ -45,8 +45,6 @@ const App = () => {
   // 1. CONFIGURATION STATES
   const [model, setModel] = useState(() => localStorage.getItem('geminiModel') || "gemini-2.5-flash");
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
-  const [outboundTag, setOutboundTag] = useState(() => localStorage.getItem('outboundTag') || "Reunião 01");
-  const [salesTag, setSalesTag] = useState(() => localStorage.getItem('salesTag') || "Reunião");
   const [dealId, setDealId] = useState("");
   const [dealTitle, setDealTitle] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -62,9 +60,7 @@ const App = () => {
   useEffect(() => {
     localStorage.setItem('geminiModel', model);
     localStorage.setItem('pipedriveToken', pipedriveToken);
-    localStorage.setItem('outboundTag', outboundTag);
-    localStorage.setItem('salesTag', salesTag);
-  }, [model, pipedriveToken, outboundTag, salesTag]);
+  }, [model, pipedriveToken]);
 
   // Handle Supabase Auth
   useEffect(() => {
@@ -141,19 +137,55 @@ const App = () => {
       return false;
     }).length;
 
+    const meetingsOutbound = flowItems.filter(i => i.object === 'activity' && i.data?.type === 'reuniao_01' && i.data?.done).length;
+    const meetingsSales = flowItems.filter(i => i.object === 'activity' && i.data?.type === 'meeting' && i.data?.done).length;
+
     const metrics = {
       daysOpen: Math.max(0, daysOpen),
       daysInactive: Math.max(0, daysInactive),
-      totalActions
+      totalActions,
+      meetingsOutbound,
+      meetingsSales
     };
     setHardMetrics(metrics);
     return metrics;
   };
 
-  const fetchPipedriveData = async () => {
+  const fetchPipedriveData = async (forceRefresh = false) => {
     try {
       setStatus("fetching");
       setErrorMsg("");
+
+      // 1. Verificar Cache no Supabase (se não for forceRefresh)
+      if (!forceRefresh) {
+        const { data: cacheData, error: cacheError } = await supabase
+          .from('analises_deals')
+          .select('*')
+          .eq('deal_id', dealId)
+          .single();
+
+        if (cacheData && !cacheError) {
+          setRawExtractedData(cacheData.dados_brutos);
+          setAnalysis(cacheData.analise_ia);
+          setHardMetrics(cacheData.metricas);
+
+          const dt = new Date(cacheData.atualizado_em);
+          setLastUpdate(`${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
+
+          // Precisamos buscar só o título rapidão p/ UI (já que não salvamos no banco na primeira versão)
+          try {
+            const tempRes = await fetch(`/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`, { method: 'GET', headers: { 'Accept': 'application/json' } });
+            if (tempRes.ok) {
+              const td = await tempRes.json();
+              setDealTitle(td.data.title);
+            }
+          } catch (e) { }
+
+          setStatus("idle");
+          setActiveTab('dashboard');
+          return null; // Stop here, we got from cache
+        }
+      }
 
       const dealUrl = `/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`;
       const participantsUrl = `/api/pipedrive/deals/${dealId}/participants?api_token=${pipedriveToken}`;
@@ -232,7 +264,7 @@ const App = () => {
 
       setRawExtractedData(compiledHistory);
       setDealTitle(dealData.data.title);
-      return compiledHistory;
+      return { compiledHistory, metrics };
 
     } catch (err) {
       setStatus("error");
@@ -241,7 +273,7 @@ const App = () => {
     }
   };
 
-  const analyzeWithGemini = async (historyText) => {
+  const analyzeWithGemini = async (historyText, metricsObj) => {
     try {
       setStatus("analyzing");
 
@@ -278,6 +310,13 @@ const App = () => {
     }
     const historyData = await fetchPipedriveData();
     if (historyData) await analyzeWithGemini(historyData);
+  };
+
+  const handleForceRefresh = async () => {
+    const fetchRes = await fetchPipedriveData(true);
+    if (fetchRes) {
+      await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics);
+    }
   };
 
   const copyInsight = () => {
@@ -394,6 +433,13 @@ const App = () => {
               <span className="absolute top-2 right-2 w-2 h-2 bg-branddi-cyan rounded-full border-2 border-white"></span>
             </button>
             <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
+            <button
+              onClick={handleForceRefresh}
+              disabled={status === 'fetching' || status === 'analyzing'}
+              className="flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-all shadow-sm border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">
+              <RefreshCw size={16} className={status === 'fetching' || status === 'analyzing' ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">Atualizar Análise</span>
+            </button>
             <button
               onClick={copyInsight}
               disabled={!analysis}
@@ -521,18 +567,10 @@ const App = () => {
                       </select>
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1 block">Tag Outbound (Prospecção)</label>
-                      <input
-                        value={outboundTag} onChange={(e) => setOutboundTag(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium outline-none"
-                      />
+                      {/* As tags antigas de prospecção foram removidas por automação matemática exata via código. */}
                     </div>
                     <div>
-                      <label className="text-[10px] font-bold text-slate-500 uppercase px-1 mb-1 block">Tag Vendas (Reunião)</label>
-                      <input
-                        value={salesTag} onChange={(e) => setSalesTag(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium outline-none"
-                      />
+                      {/* As tags antigas de prospecção foram removidas por automação matemática exata via código. */}
                     </div>
                   </div>
                 )}
@@ -685,16 +723,16 @@ const App = () => {
                           <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
                             <div className="flex items-center gap-3">
                               <Mail className="text-slate-400" size={18} />
-                              <span className="text-sm font-bold text-slate-600 uppercase tracking-tighter">Outbound ({outboundTag})</span>
+                              <span className="text-sm font-bold text-slate-600 uppercase tracking-tighter">Prospecção (reuniao_01) </span>
                             </div>
-                            <span className="text-2xl font-black text-slate-800">{analysis.reunioesOutbound}</span>
+                            <span className="text-2xl font-black text-slate-800">{hardMetrics?.meetingsOutbound || 0}</span>
                           </div>
                           <div className="flex items-center justify-between p-4 bg-orange-50 rounded-xl border border-orange-100">
                             <div className="flex items-center gap-3">
                               <Users className="text-orange-500" size={18} />
-                              <span className="text-sm font-bold text-orange-700 uppercase tracking-tighter">Vendas ({salesTag})</span>
+                              <span className="text-sm font-bold text-orange-700 uppercase tracking-tighter">Vendas (meeting)</span>
                             </div>
-                            <span className="text-2xl font-black text-orange-600">{analysis.reunioesVendas}</span>
+                            <span className="text-2xl font-black text-orange-600">{hardMetrics?.meetingsSales || 0}</span>
                           </div>
                         </div>
                       </div>
