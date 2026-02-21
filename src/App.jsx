@@ -309,8 +309,8 @@ const App = () => {
       showToast("Preencha as configurações do Pipedrive primeiro!");
       return;
     }
-    const historyData = await fetchPipedriveData();
-    if (historyData) await analyzeWithGemini(historyData);
+    const fetchRes = await fetchPipedriveData();
+    if (fetchRes) await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics);
   };
 
   const handleForceRefresh = async () => {
