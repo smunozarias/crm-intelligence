@@ -285,8 +285,14 @@ const App = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Erro desconhecido na API Vercel");
+        let errorMsg = "Erro desconhecido na API Vercel";
+        try {
+          const errorData = await response.json();
+          errorMsg = errorData.error || errorMsg;
+        } catch (e) {
+          errorMsg = `Erro no Servidor (${response.status}): O servidor falhou ao processar a resposta.`;
+        }
+        throw new Error(errorMsg);
       }
 
       const result = await response.json();
