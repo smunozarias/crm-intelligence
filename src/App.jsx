@@ -48,6 +48,7 @@ const App = () => {
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
   const [dealId, setDealId] = useState("");
   const [dealTitle, setDealTitle] = useState("");
+  const [lastUpdate, setLastUpdate] = useState(null);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [status, setStatus] = useState("idle");
   const [errorMsg, setErrorMsg] = useState("");
