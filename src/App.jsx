@@ -227,7 +227,8 @@ const App = () => {
       let start = 0;
       let moreItems = true;
 
-      while (moreItems) {
+      let pageCount = 0;
+      while (moreItems && pageCount < 3) { // Limita a 300 itens para evitar timeout
         const flowUrl = `/api/pipedrive/deals/${dealId}/flow?api_token=${pipedriveToken}&limit=100&start=${start}`;
         const flowRes = await fetch(flowUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
         if (!flowRes.ok) throw new Error("Erro ao buscar histórico.");
@@ -237,6 +238,7 @@ const App = () => {
 
         if (flowData.additional_data?.pagination?.more_items_in_collection) {
           start = flowData.additional_data.pagination.next_start;
+          pageCount++;
         } else {
           moreItems = false;
         }
@@ -308,7 +310,11 @@ const App = () => {
           const errorData = await response.json();
           errorMsg = errorData.error || errorMsg;
         } catch (e) {
-          errorMsg = `Erro no Servidor (${response.status}): O servidor falhou ao processar a resposta.`;
+          if (response.status === 504) {
+            errorMsg = "Tempo Esgotado (504): A análise deste negócio é muito complexa ou o histórico é muito longo. Tente novamente em instantes.";
+          } else {
+            errorMsg = `Erro no Servidor (${response.status}): O servidor falhou ao processar a resposta.`;
+          }
         }
         throw new Error(errorMsg);
       }
