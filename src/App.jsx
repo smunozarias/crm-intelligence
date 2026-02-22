@@ -43,6 +43,20 @@ const App = () => {
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
+  // WATERMARK DE VERSÃO - Se você não ver isso no F12, está rodando o código antigo!
+  useEffect(() => {
+    console.log("%c🚀 CRM Intelligence v2.1.0 - Cache & Tradução Ativos", "color: #0ACFDE; font-weight: bold; font-size: 14px;");
+    console.log("📂 Local: /Users/sergiomunoz/CRM Intelligence/src/App.jsx");
+
+    // Migração de modelos obsoletos
+    const savedModel = localStorage.getItem('geminiModel');
+    if (savedModel && (savedModel.includes('1.5') || savedModel.includes('2.0-flash-exp'))) {
+      console.log("🔄 Migrando modelo obsoleto de localStorage para Gemini 2.5 Flash");
+      localStorage.setItem('geminiModel', 'gemini-2.5-flash');
+      setModel('gemini-2.5-flash');
+    }
+  }, []);
+
   // 1. CONFIGURATION STATES
   const [model, setModel] = useState(() => localStorage.getItem('geminiModel') || "gemini-2.5-flash");
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
@@ -80,7 +94,12 @@ const App = () => {
 
   const handleGoogleLogin = async () => {
     try {
-      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: window.location.origin
+        }
+      });
       if (error) throw error;
     } catch (error) {
       showToast("Erro ao fazer login. Verifique as credenciais do Supabase.");
@@ -158,34 +177,32 @@ const App = () => {
       setStatus("fetching");
       setErrorMsg("");
 
-      // 1. Verificar Cache no Supabase (se não for forceRefresh)
       if (!forceRefresh) {
+        console.log("🔍 Iniciando busca de cache para ID:", dealId);
+
         const { data: cacheData, error: cacheError } = await supabase
-          .from('analises_deals')
+          .from('deal_analyses')
           .select('*')
-          .eq('deal_id', dealId)
-          .single();
+          .eq('deal_id', String(dealId))
+          .maybeSingle();
 
         if (cacheData && !cacheError) {
+          console.log("✅ Cache ENCONTRADO:", cacheData);
           setRawExtractedData(cacheData.dados_brutos);
           setAnalysis(cacheData.analise_ia);
           setHardMetrics(cacheData.metricas);
 
+          if (cacheData.deal_title) {
+            setDealTitle(cacheData.deal_title);
+          }
+
           const dt = new Date(cacheData.atualizado_em);
           setLastUpdate(`${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
 
-          // Precisamos buscar só o título rapidão p/ UI (já que não salvamos no banco na primeira versão)
-          try {
-            const tempRes = await fetch(`/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`, { method: 'GET', headers: { 'Accept': 'application/json' } });
-            if (tempRes.ok) {
-              const td = await tempRes.json();
-              setDealTitle(td.data.title);
-            }
-          } catch (e) { }
-
           setStatus("idle");
           setActiveTab('dashboard');
-          return null; // Stop here, we got from cache
+          showToast("⚡ Análise carregada do cache!");
+          return null;
         }
       }
 
@@ -301,6 +318,36 @@ const App = () => {
       const parsedData = JSON.parse(rawText.trim());
 
       setAnalysis(parsedData);
+
+      const nowString = new Date().toISOString();
+      const dt = new Date(nowString);
+      setLastUpdate(`${dt.toLocaleDateString('pt-BR')} às ${dt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`);
+
+      // Salvar no Supabase Cache
+      try {
+        console.log("💾 Tentando salvar no cache Supabase...");
+        const { error: upsertError } = await supabase
+          .from('deal_analyses')
+          .upsert({
+            deal_id: String(dealId),
+            deal_title: dealTitle,
+            analise_ia: parsedData,
+            dados_brutos: historyText,
+            metricas: metricsObj,
+            atualizado_em: nowString
+          }, { onConflict: 'deal_id' });
+
+        if (upsertError) {
+          console.error("❌ Erro ao salvar no Supabase:", upsertError.code, upsertError.message);
+          console.log("Dica: Verifique as políticas de RLS no Supabase.");
+        } else {
+          console.log("✅ Sucesso: Cache atualizado para o deal", dealId);
+          showToast("✅ Análise salva no banco!");
+        }
+      } catch (dbErr) {
+        console.error("🚨 Exceção ao conectar com Supabase:", dbErr);
+      }
+
       setActiveTab("dashboard");
       setStatus("success");
 
@@ -567,11 +614,9 @@ const App = () => {
                         onChange={(e) => setModel(e.target.value)}
                         className="w-full bg-white border border-slate-200 rounded-lg px-4 py-2 text-sm font-medium outline-none"
                       >
+                        <option value="gemini-3.1-pro">Gemini 3.1 Pro (Elite)</option>
+                        <option value="gemini-2.5-pro">Gemini 2.5 Pro (Avançado)</option>
                         <option value="gemini-2.5-flash">Gemini 2.5 Flash (Padrão)</option>
-                        <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-                        <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                        <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
-                        <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
                       </select>
                     </div>
                     <div>
@@ -607,14 +652,14 @@ const App = () => {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-200 pb-8">
                 <div>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="bg-branddi-cyan/20 text-branddi-navy text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border border-branddi-cyan/30">Análise em tempo real</span>
+                    <span className="bg-branddi-cyan/20 text-branddi-navy text-[10px] font-bold px-2 py-0.5 rounded-full uppercase border border-branddi-cyan/30">Análise Inteligente</span>
                     <span className="text-slate-300">•</span>
-                    <span className="text-slate-500 text-xs font-medium">Extraído em {new Date().toLocaleTimeString()}</span>
+                    <span className="text-slate-500 text-xs font-medium">{lastUpdate ? `Atualizado em: ${lastUpdate}` : 'Análise Recente'}</span>
                   </div>
                   <h1 className="text-3xl font-extrabold text-slate-800 tracking-tight">{dealTitle} <span className="text-slate-400 text-xl font-medium block md:inline mt-1 md:mt-0">#{dealId}</span></h1>
                   <p className="text-slate-500 text-sm mt-1 flex items-center gap-1.5">
                     <Target size={14} className="text-branddi-cyan" />
-                    Status do Algoritmo: <span className="text-emerald-600 font-bold">Processado com Sucesso</span>
+                    Status: <span className="text-emerald-600 font-bold">Processado com Sucesso</span>
                   </p>
                 </div>
 
@@ -682,7 +727,7 @@ const App = () => {
                       </div>
                       <div className="flex items-center gap-1.5 mt-4">
                         <div className={`w-2 h-2 rounded-full ${hardMetrics?.daysInactive > 10 ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                        <span className="text-[10px] font-bold text-slate-400">{hardMetrics?.daysInactive > 10 ? 'ESTAGNADO' : 'ENGANJAM. OK'}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{hardMetrics?.daysInactive > 10 ? 'ESTAGNADO' : 'ENGAJAMENTO OK'}</span>
                       </div>
                     </div>
 
