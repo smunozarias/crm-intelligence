@@ -194,6 +194,14 @@ const App = () => {
 
           if (cacheData.deal_title) {
             setDealTitle(cacheData.deal_title);
+          } else {
+            // Fallback caso o título não tenha sido salvo no cache
+            const dealUrl = `/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`;
+            const dealRes = await fetch(dealUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+            if (dealRes.ok) {
+              const d = await dealRes.json();
+              if (d.data?.title) setDealTitle(d.data.title);
+            }
           }
 
           const dt = new Date(cacheData.atualizado_em);
@@ -369,11 +377,24 @@ const App = () => {
       showToast("Preencha as configurações do Pipedrive primeiro!");
       return;
     }
+
+    // RESET DE ESTADO PARA EVITAR MISTURA DE DADOS
+    setAnalysis(null);
+    setHardMetrics(null);
+    setErrorMsg("");
+    setRawExtractedData("");
+    setDealTitle("");
+
     const fetchRes = await fetchPipedriveData();
     if (fetchRes) await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics);
   };
 
   const handleForceRefresh = async () => {
+    setAnalysis(null);
+    setHardMetrics(null);
+    setErrorMsg("");
+    setRawExtractedData("");
+
     const fetchRes = await fetchPipedriveData(true);
     if (fetchRes) {
       await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics);
