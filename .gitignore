@@ -24,3 +24,7 @@ dist-ssr
 *.sw?
 .vercel
 .env
+
+# Debug/test scripts
+debug_*.js
+test_*.js

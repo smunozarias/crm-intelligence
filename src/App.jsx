@@ -33,31 +33,26 @@ import {
   ChevronRight,
   ExternalLink,
   ShieldAlert,
-  RefreshCw
+  RefreshCw,
+  BookOpen,
+  Send,
+  Linkedin,
+  Phone,
+  Flame,
+  BarChart3,
+  FileText,
+  Timer
 } from 'lucide-react';
 import { supabase } from './lib/supabase';
 
 
 const App = () => {
+
   // Authentication State
   const [user, setUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
 
-  // WATERMARK DE VERSÃO - Se você não ver isso no F12, está rodando o código antigo!
-  useEffect(() => {
-    console.log("%c🚀 CRM Intelligence v2.1.0 - Cache & Tradução Ativos", "color: #0ACFDE; font-weight: bold; font-size: 14px;");
-    console.log("📂 Local: /Users/sergiomunoz/CRM Intelligence/src/App.jsx");
-
-    // Migração de modelos obsoletos
-    const savedModel = localStorage.getItem('geminiModel');
-    if (savedModel && (savedModel.includes('1.5') || savedModel.includes('2.0-flash-exp'))) {
-      console.log("🔄 Migrando modelo obsoleto de localStorage para Gemini 2.5 Flash");
-      localStorage.setItem('geminiModel', 'gemini-2.5-flash');
-      setModel('gemini-2.5-flash');
-    }
-  }, []);
-
-  // 1. CONFIGURATION STATES
+  // Configuration States
   const [model, setModel] = useState(() => localStorage.getItem('geminiModel') || "gemini-2.5-flash");
   const [pipedriveToken, setPipedriveToken] = useState(() => localStorage.getItem('pipedriveToken') || "");
   const [dealId, setDealId] = useState("");
@@ -69,8 +64,37 @@ const App = () => {
   const [analysis, setAnalysis] = useState(null);
   const [hardMetrics, setHardMetrics] = useState(null);
   const [rawExtractedData, setRawExtractedData] = useState("");
-  const [activeTab, setActiveTab] = useState("config"); // Default to config
+  const [detailedParticipants, setDetailedParticipants] = useState([]);
+  const [activeTab, setActiveTab] = useState("config");
   const [toast, setToast] = useState(null);
+
+  // Deals salvos no Supabase
+  const [savedDeals, setSavedDeals] = useState([]);
+  const [loadingDeals, setLoadingDeals] = useState(false);
+  const [dealsError, setDealsError] = useState("");
+
+  // Buscar todos os deals salvos
+  const fetchSavedDeals = async () => {
+    setLoadingDeals(true);
+    setDealsError("");
+    try {
+      const { data, error } = await supabase
+        .from('deal_analyses')
+        .select('*')
+        .order('analise_ia->score', { ascending: false });
+      if (error) throw error;
+      setSavedDeals(data || []);
+    } catch (err) {
+      setDealsError("Erro ao buscar deals salvos: " + (err.message || err));
+    }
+    setLoadingDeals(false);
+  };
+
+  // Carregar deals ao abrir aba
+  useEffect(() => {
+    if (activeTab === 'deals') fetchSavedDeals();
+  }, [activeTab]);
+
 
   // Save credentials to LocalStorage
   useEffect(() => {
@@ -141,13 +165,25 @@ const App = () => {
     const createdDate = parsePipedriveDate(dealData.data.add_time);
     const daysOpen = Math.floor((today - createdDate) / (1000 * 3600 * 24));
 
-    let maxActionDate = createdDate;
+    // Filtrar apenas pontos de contato reais (email, whatsapp, linkedin, call, ligação)
+    const isContactPoint = (item) => {
+      if (item.object === 'mailThread' || item.object === 'mailMessage') return true;
+      if (item.object === 'activity') {
+        const t = (item.data?.type || '').toLowerCase();
+        return ['call', 'email', 'linkedin', 'whatsapp', 'ligação'].some(k => t.includes(k));
+      }
+      return false;
+    };
+
+    let lastContactDate = createdDate;
     flowItems.forEach(item => {
-      const itemDate = parsePipedriveDate(item.add_time);
-      if (itemDate > maxActionDate) maxActionDate = itemDate;
+      if (isContactPoint(item)) {
+        const itemDate = parsePipedriveDate(item.add_time);
+        if (itemDate > lastContactDate) lastContactDate = itemDate;
+      }
     });
 
-    const daysInactive = Math.floor((today - maxActionDate) / (1000 * 3600 * 24));
+    const daysInactive = Math.floor((today - lastContactDate) / (1000 * 3600 * 24));
 
     const totalActions = flowItems.filter(item => {
       if (item.object === 'mailThread' || item.object === 'mailMessage') return true;
@@ -172,6 +208,70 @@ const App = () => {
     return metrics;
   };
 
+  // Função para resumir localmente o histórico do Deal
+  const resumirHistorico = (allFlowItems) => {
+    // Limites por tipo
+    const LIMITE_EMAILS = 10;
+    const LIMITE_REUNIOES = 5;
+    const LIMITE_NOTAS = 5;
+    // Separar por tipo
+    const emails = [];
+    const reunioes = [];
+    const notas = [];
+    const outros = [];
+    allFlowItems.forEach(item => {
+      if (item.object === 'mailThread' || item.object === 'mailMessage') {
+        emails.push(item);
+      } else if (item.object === 'activity' && (item.data?.type === 'meeting' || item.data?.type === 'reuniao_01')) {
+        reunioes.push(item);
+      } else if (item.object === 'note') {
+        notas.push(item);
+      } else {
+        outros.push(item);
+      }
+    });
+    // Limitar quantidade
+    const emailsLim = emails.slice(-LIMITE_EMAILS);
+    const reunioesLim = reunioes.slice(-LIMITE_REUNIOES);
+    const notasLim = notas.slice(-LIMITE_NOTAS);
+    // Resumir notas longas
+    const resumirTexto = (txt) => {
+      if (!txt) return '';
+      if (txt.length > 400) return txt.slice(0, 200) + ' ... ' + txt.slice(-200);
+      return txt;
+    };
+    // Montar texto
+    let resumo = '';
+    if (emailsLim.length > 0) {
+      resumo += '\n--- ÚLTIMOS E-MAILS ---\n';
+      emailsLim.forEach(e => {
+        resumo += `[${e.add_time}] Assunto: ${e.data?.subject || ''}\n`;
+        if (e.data?.snippet) resumo += `   Resumo: ${resumirTexto(e.data.snippet)}\n`;
+      });
+    }
+    if (reunioesLim.length > 0) {
+      resumo += '\n--- ÚLTIMAS REUNIÕES ---\n';
+      reunioesLim.forEach(r => {
+        resumo += `[${r.add_time}] Tipo: ${r.data?.type} | Assunto: ${r.data?.subject} | Estado: ${r.data?.done ? 'Concluída' : 'Pendente'}\n`;
+        if (typeof r.data?.note === 'string') resumo += `   Detalhes: ${resumirTexto(r.data.note)}\n`;
+      });
+    }
+    if (notasLim.length > 0) {
+      resumo += '\n--- ÚLTIMAS NOTAS ---\n';
+      notasLim.forEach(n => {
+        const cleanNote = typeof n.data?.content === 'string' ? n.data.content.replace(/<[^>]*>?/gm, '') : '';
+        resumo += `[${n.add_time}] NOTA: ${resumirTexto(cleanNote)}\n`;
+      });
+    }
+    if (outros.length > 0) {
+      resumo += '\n--- OUTRAS INTERAÇÕES (resumidas) ---\n';
+      outros.slice(-5).forEach(o => {
+        resumo += `[${o.add_time}] Tipo: ${o.object}\n`;
+      });
+    }
+    return resumo;
+  };
+
   const fetchPipedriveData = async (forceRefresh = false) => {
     try {
       setStatus("fetching");
@@ -192,16 +292,22 @@ const App = () => {
           setAnalysis(cacheData.analise_ia);
           setHardMetrics(cacheData.metricas);
 
-          if (cacheData.deal_title) {
-            setDealTitle(cacheData.deal_title);
-          } else {
-            // Fallback caso o título não tenha sido salvo no cache
+          // Sempre buscar o título atualizado do Deal
+          try {
             const dealUrl = `/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`;
             const dealRes = await fetch(dealUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
             if (dealRes.ok) {
               const d = await dealRes.json();
-              if (d.data?.title) setDealTitle(d.data.title);
+              if (d.data?.title) {
+                setDealTitle(d.data.title);
+                // Atualiza o cache local apenas do título, se necessário
+                if (cacheData.deal_title !== d.data.title) {
+                  await supabase.from('deal_analyses').update({ deal_title: d.data.title }).eq('deal_id', String(dealId));
+                }
+              }
             }
+          } catch (e) {
+            setDealTitle(cacheData.deal_title || '');
           }
 
           const dt = new Date(cacheData.atualizado_em);
@@ -218,32 +324,55 @@ const App = () => {
       const participantsUrl = `/api/pipedrive/deals/${dealId}/participants?api_token=${pipedriveToken}`;
 
       const dealRes = await fetch(dealUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
-
       if (!dealRes.ok) {
         const errorText = await dealRes.text();
         throw new Error(`Erro na API (${dealRes.status}): ${dealRes.status === 401 ? "Token inválido" : "Negócio não encontrado"}. Detalhes: ${errorText.substring(0, 50)}`);
       }
 
       const participantsRes = await fetch(participantsUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
-
       const dealData = await dealRes.json();
-      const participantsData = participantsRes.ok ? await participantsRes.json() : { success: false, data: [] };
+      let participantsData = participantsRes.ok ? await participantsRes.json() : { success: false, data: [] };
+
+      // Buscar dados completos de cada participante
+      if (participantsData.data && participantsData.data.length > 0) {
+        const detailedParticipants = await Promise.all(participantsData.data.map(async (p) => {
+          const personId = p.person_id?.id || p.id;
+          if (!personId) return p;
+          try {
+            const personRes = await fetch(`/api/pipedrive/persons/${personId}?api_token=${pipedriveToken}`, { method: 'GET', headers: { 'Accept': 'application/json' } });
+            if (!personRes.ok) return p;
+            const personData = await personRes.json();
+            // Merge dados detalhados
+            return {
+              ...p,
+              ...personData.data,
+              email: personData.data?.email || p.email,
+              label: personData.data?.label || p.label,
+              linkedin: personData.data?.linkedin || personData.data?.cf_linkedin || '',
+              tags: personData.data?.label || '',
+              blacklist: personData.data?.blacklist || personData.data?.cf_blacklist || false,
+              // Adicione outros campos customizados conforme necessário
+            };
+          } catch (e) {
+            return p;
+          }
+        }));
+        participantsData.data = detailedParticipants;
+      }
 
       if (!dealData.success) throw new Error("A API do Pipedrive retornou sucesso=false para este Deal.");
+
 
       let allFlowItems = [];
       let start = 0;
       let moreItems = true;
-
       let pageCount = 0;
       while (moreItems && pageCount < 3) { // Limita a 300 itens para evitar timeout
         const flowUrl = `/api/pipedrive/deals/${dealId}/flow?api_token=${pipedriveToken}&limit=100&start=${start}`;
         const flowRes = await fetch(flowUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
         if (!flowRes.ok) throw new Error("Erro ao buscar histórico.");
-
         const flowData = await flowRes.json();
         if (flowData.data) allFlowItems = allFlowItems.concat(flowData.data);
-
         if (flowData.additional_data?.pagination?.more_items_in_collection) {
           start = flowData.additional_data.pagination.next_start;
           pageCount++;
@@ -254,46 +383,29 @@ const App = () => {
 
       const metrics = calculateHardMetrics(dealData, allFlowItems);
 
+      // Resumir histórico localmente para economizar tokens
+      let resumoHistorico = resumirHistorico(allFlowItems);
+
       let compiledHistory = `--- DADOS DO NEGÓCIO E MÉTRICAS EXATAS ---\n`;
       compiledHistory += `ID do Negócio: ${dealId}\n`;
       compiledHistory += `Título: ${dealData.data.title}\n`;
       compiledHistory += `Dias no Funil (Aberto há): ${metrics.daysOpen} dias\n`;
-      compiledHistory += `Dias Inativo (Sem interação): ${metrics.daysInactive} dias\n`;
+      compiledHistory += `Dias sem Contato (Email/WhatsApp/LinkedIn/Call): ${metrics.daysInactive} dias\n`;
       compiledHistory += `Total de Interações Registradas: ${metrics.totalActions}\n\n`;
 
       compiledHistory += `--- PARTICIPANTES VINCULADOS ---\n`;
       if (participantsData.data && participantsData.data.length > 0) {
         participantsData.data.forEach(p => {
-          const emails = p.person_id?.email?.map(e => e.value).join(', ') || '';
-          compiledHistory += `- Nome: ${p.person_id?.name} | Email: ${emails}\n`;
+          const emails = Array.isArray(p.email) ? p.email.map(e => e.value || e).join(', ') : (p.email || '');
+          compiledHistory += `- Nome: ${p.name || p.person_id?.name} | Email: ${emails}\n`;
         });
       }
-      compiledHistory += `\n--- HISTÓRICO DE ATIVIDADES ---\n`;
 
-      allFlowItems.forEach(item => {
-        let dateStr = "Data desconhecida";
-        try { dateStr = new Date(parsePipedriveDate(item.add_time)).toLocaleDateString('pt-PT'); } catch (e) { }
-
-        if (item.object === 'note') {
-          const cleanNote = typeof item.data?.content === 'string' ? item.data.content.replace(/<[^>]*>?/gm, '') : '';
-          compiledHistory += `[${dateStr}] NOTA: ${cleanNote}\n`;
-        }
-        else if (item.object === 'activity') {
-          compiledHistory += `[${dateStr}] ATIVIDADE | Tipo: [${item.data?.type}] | Assunto: [${item.data?.subject}] | Estado: ${item.data?.done ? 'Concluída' : 'Pendente'}\n`;
-          if (typeof item.data?.note === 'string') {
-            const cleanActNote = item.data.note.replace(/<[^>]*>?/gm, '');
-            compiledHistory += `   Detalhes: ${cleanActNote}\n`;
-          }
-        }
-        else if (item.object === 'mailThread' || item.object === 'mailMessage') {
-          compiledHistory += `[${dateStr}] E-MAIL: Assunto: ${item.data?.subject}\n`;
-          if (item.data?.snippet) compiledHistory += `   Resumo: ${item.data.snippet}\n`;
-        }
-      });
+      compiledHistory += resumoHistorico;
 
       setRawExtractedData(compiledHistory);
       setDealTitle(dealData.data.title);
-      return { compiledHistory, metrics };
+      return { compiledHistory, metrics, participants: participantsData.data, title: dealData.data.title };
 
     } catch (err) {
       setStatus("error");
@@ -302,14 +414,16 @@ const App = () => {
     }
   };
 
-  const analyzeWithGemini = async (historyText, metricsObj) => {
+  const analyzeWithGemini = async (historyText, metricsObj, titleOverride) => {
     try {
       setStatus("analyzing");
 
+      // Prompt customizado para avaliação consultiva do SDR
+      const prompt = `Analise o histórico abaixo e gere um JSON com os seguintes campos:\n\n{\n  resumo: string (resuma a abordagem do SDR),\n  nota: número de 0 a 10,\n  exemplos: array de exemplos de respostas do SDR,\n  pontosMelhoria: array de sugestões de melhoria\n}\n\nAvalie se o SDR ouviu e respondeu corretamente o lead, se personalizou as respostas, se houve follow-up adequado, e se a abordagem foi consultiva.\n\nHistórico:\n${historyText}`;
       const response = await fetch(`/api/gemini`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ historyText, model })
+        body: JSON.stringify({ historyText: prompt, model })
       });
 
       if (!response.ok) {
@@ -331,6 +445,16 @@ const App = () => {
       let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
       const parsedData = JSON.parse(rawText.trim());
 
+      // Se vier a avaliação, coloque no campo correto
+      if (parsedData.resumo || parsedData.nota || parsedData.exemplos || parsedData.pontosMelhoria) {
+        parsedData.avaliacaoProspecao = {
+          resumo: parsedData.resumo,
+          nota: parsedData.nota,
+          exemplos: parsedData.exemplos,
+          pontosMelhoria: parsedData.pontosMelhoria
+        };
+      }
+
       setAnalysis(parsedData);
 
       const nowString = new Date().toISOString();
@@ -344,7 +468,7 @@ const App = () => {
           .from('deal_analyses')
           .upsert({
             deal_id: String(dealId),
-            deal_title: dealTitle,
+            deal_title: titleOverride || dealTitle,
             analise_ia: parsedData,
             dados_brutos: historyText,
             metricas: metricsObj,
@@ -386,7 +510,10 @@ const App = () => {
     setDealTitle("");
 
     const fetchRes = await fetchPipedriveData();
-    if (fetchRes) await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics);
+    if (fetchRes) {
+      if (fetchRes.participants) setDetailedParticipants(fetchRes.participants);
+      await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics, fetchRes.title);
+    }
   };
 
   const handleForceRefresh = async () => {
@@ -397,7 +524,8 @@ const App = () => {
 
     const fetchRes = await fetchPipedriveData(true);
     if (fetchRes) {
-      await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics);
+      if (fetchRes.participants) setDetailedParticipants(fetchRes.participants);
+      await analyzeWithGemini(fetchRes.compiledHistory, fetchRes.metrics, fetchRes.title);
     }
   };
 
@@ -478,12 +606,18 @@ const App = () => {
           <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Principal</p>
           <SidebarIcon icon={Settings} label="Configurações" id="config" active={activeTab === 'config'} onClick={setActiveTab} />
 
+          <div className="pt-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Banco de Dados</p>
+            <SidebarIcon icon={Database} label="Deals Salvos" id="deals" active={activeTab === 'deals'} onClick={setActiveTab} />
+          </div>
+
           <div className={`pt-4 ${!analysis ? 'opacity-40 pointer-events-none' : ''}`}>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-4 mb-2">Relatórios IA</p>
             <SidebarIcon icon={LayoutDashboard} label="Dashboard" id="dashboard" active={activeTab === 'dashboard'} onClick={setActiveTab} />
             <SidebarIcon icon={Target} label="Inteligência" id="inteligencia" active={activeTab === 'inteligencia'} onClick={setActiveTab} />
             <SidebarIcon icon={Search} label="Prospecção" id="prospeccao" active={activeTab === 'prospeccao'} onClick={setActiveTab} />
             <SidebarIcon icon={Users} label="Participantes" id="participantes" active={activeTab === 'participantes'} onClick={setActiveTab} />
+            <SidebarIcon icon={BookOpen} label="Playbook" id="playbook" active={activeTab === 'playbook'} onClick={setActiveTab} />
           </div>
         </nav>
 
@@ -707,7 +841,8 @@ const App = () => {
 
               {/* DASHBOARD TAB */}
               {activeTab === 'dashboard' && (
-                <div className="space-y-8 fade-in">
+                    <div className="space-y-8 fade-in">
+                      {/* ...existing code... */}
                   <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                     <div className="card p-6 flex flex-col justify-between h-40">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Health Score</p>
@@ -840,6 +975,71 @@ const App = () => {
                       </div>
                     </div>
                   </div>
+
+                  {/* CARDS NOVOS: Produto, SLA, Gatilhos, Scoring */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    {/* Produto Recomendado */}
+                    {analysis.produtoRecomendado && (
+                      <div className="card p-6 border-l-4 border-branddi-cyan">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Produto Recomendado</p>
+                        <p className="text-lg font-black text-branddi-navy">{analysis.produtoRecomendado.produto}</p>
+                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">{analysis.produtoRecomendado.justificativa}</p>
+                      </div>
+                    )}
+
+                    {/* Avaliação SLA */}
+                    {analysis.avaliacaoSLA && (
+                      <div className={`card p-6 border-l-4 ${analysis.avaliacaoSLA.statusSLA === 'Em dia' ? 'border-emerald-500' : analysis.avaliacaoSLA.statusSLA === 'Atrasado' ? 'border-orange-500' : 'border-red-500'}`}>
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">SLA Follow-up</p>
+                        <div className="flex items-center gap-2">
+                          <Timer size={20} className={analysis.avaliacaoSLA.statusSLA === 'Em dia' ? 'text-emerald-600' : analysis.avaliacaoSLA.statusSLA === 'Atrasado' ? 'text-orange-600' : 'text-red-600'} />
+                          <span className={`text-lg font-black ${analysis.avaliacaoSLA.statusSLA === 'Em dia' ? 'text-emerald-600' : analysis.avaliacaoSLA.statusSLA === 'Atrasado' ? 'text-orange-600' : 'text-red-600'}`}>{analysis.avaliacaoSLA.statusSLA}</span>
+                        </div>
+                        <p className="text-xs text-slate-500 mt-2">{analysis.avaliacaoSLA.diasDesdeUltimoContato} dias desde o último contato</p>
+                        <p className="text-xs text-slate-400 mt-1">{analysis.avaliacaoSLA.detalhes}</p>
+                      </div>
+                    )}
+
+                    {/* Gatilhos de Urgência */}
+                    {analysis.gatilhosUrgencia?.length > 0 && (
+                      <div className="card p-6 border-l-4 border-red-500 md:col-span-2">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Gatilhos de Urgência</p>
+                        <div className="space-y-2">
+                          {analysis.gatilhosUrgencia.map((g, i) => (
+                            <div key={i} className="flex items-start gap-2">
+                              <Flame size={14} className={g.nivel === 'Crítico' ? 'text-red-500 mt-0.5' : g.nivel === 'Alto' ? 'text-orange-500 mt-0.5' : 'text-yellow-500 mt-0.5'} />
+                              <div>
+                                <span className={`text-xs font-black uppercase ${g.nivel === 'Crítico' ? 'text-red-600' : g.nivel === 'Alto' ? 'text-orange-600' : 'text-yellow-600'}`}>[{g.nivel}] </span>
+                                <span className="text-xs font-bold text-slate-700">{g.gatilho}</span>
+                                <p className="text-xs text-slate-500 mt-0.5">{g.contexto}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Scoring Detalhado */}
+                  {analysis.scoringDetalhado && (
+                    <div className="card p-6">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Scoring Detalhado</p>
+                      <div className="grid grid-cols-4 gap-4">
+                        {[{label: 'Engajamento', key: 'engajamento', color: 'bg-blue-500'}, {label: 'Fit ICP', key: 'fitICP', color: 'bg-emerald-500'}, {label: 'Momento', key: 'momento', color: 'bg-orange-500'}, {label: 'Risco', key: 'risco', color: 'bg-red-500'}].map(item => (
+                          <div key={item.key} className="text-center">
+                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">{item.label}</p>
+                            <div className="relative w-16 h-16 mx-auto">
+                              <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
+                                <path className="text-slate-100" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                                <path className={`${item.color.replace('bg-', 'text-')}`} stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" strokeDasharray={`${analysis.scoringDetalhado[item.key]}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
+                              </svg>
+                              <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-slate-800">{analysis.scoringDetalhado[item.key]}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -921,6 +1121,7 @@ const App = () => {
               {/* TAB PROSPECCAO */}
               {activeTab === 'prospeccao' && (
                 <div className="space-y-8 fade-in">
+                  // ...existing code...
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="card p-8 border-l-8 border-emerald-500">
                       <SectionTitle title="Mapeamento de Prioridade de Contato" subtitle="Quem o vendedor deve focar agora." />
@@ -943,7 +1144,7 @@ const App = () => {
                         {analysis.prospeccao?.contatosEvitar?.length > 0 ? analysis.prospeccao.contatosEvitar.map((item, i) => (
                           <div key={i} className="bg-slate-50 p-4 rounded-xl border border-slate-200">
                             <p className="font-bold text-slate-700">{item.nome}</p>
-                            <p className="text-xs text-slate-500 mt-1">{item.motivo}</p>
+                            <p className="text-xs text-slate-500 mt-1">{item.motivo || 'Motivo não informado (corrija na base de dados)'}</p>
                           </div>
                         )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhum bloqueador identificado no momento.</p></div>}
                       </div>
@@ -957,7 +1158,31 @@ const App = () => {
                         {analysis.prospeccao?.mapeamentoConta?.map((area, i) => (
                           <div key={i} className="p-3 bg-slate-50 rounded-lg">
                             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{area.area}</p>
-                            <p className="text-sm font-bold text-slate-700 mt-1">{area.pessoas.join(', ')}</p>
+                            <div className="text-sm font-bold text-slate-700 mt-1 space-y-1">
+                              {Array.isArray(area.pessoas) && area.pessoas.length > 0
+                                ? area.pessoas.map((p, idx) => {
+                                    const nome = typeof p === 'string' ? p : (p.nome || p.name || '');
+                                    const match = detailedParticipants.find(dp => (dp.name && dp.name.toLowerCase() === nome.toLowerCase()));
+                                    return (
+                                      <div key={idx} className="mb-1">
+                                        <span>{match?.name || nome}</span>
+                                        {match?.email && (
+                                          <span className="ml-2 text-xs text-slate-500">{Array.isArray(match.email) ? match.email.map(e => e.value || e).join(', ') : match.email}</span>
+                                        )}
+                                        {match?.linkedin && (
+                                          <a href={match.linkedin} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs text-blue-600 underline">LinkedIn</a>
+                                        )}
+                                        {match?.tags && (
+                                          <span className="ml-2 text-xs bg-slate-200 px-2 py-0.5 rounded">{match.tags}</span>
+                                        )}
+                                        {match?.blacklist && (
+                                          <span className="ml-2 text-xs bg-red-200 text-red-700 px-2 py-0.5 rounded">Blacklisted</span>
+                                        )}
+                                      </div>
+                                    );
+                                  })
+                                : 'Nenhum contato disponível'}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1046,15 +1271,31 @@ const App = () => {
                     <div className="card p-8">
                       <SectionTitle title="Equipe da Empresa Cliente" subtitle="Decisores e influenciadores." />
                       <div className="space-y-3">
-                        {analysis.participantesMapa?.equipeEmpresa?.map((e, i) => (
-                          <div key={i} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
-                            <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-400 shadow-sm">{e.nome?.charAt(0)}</div>
-                            <div>
-                              <p className="text-sm font-black text-slate-800">{e.nome}</p>
-                              <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">{e.cargoInferido}</p>
+                        {analysis.participantesMapa?.equipeEmpresa?.map((e, i) => {
+                          const nome = e.nome || '';
+                          const match = detailedParticipants.find(dp => (dp.name && dp.name.toLowerCase() === nome.toLowerCase()));
+                          return (
+                            <div key={i} className="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-100">
+                              <div className="w-10 h-10 rounded-full bg-white border border-slate-200 flex items-center justify-center font-bold text-slate-400 shadow-sm">{(match?.name || nome).charAt(0)}</div>
+                              <div>
+                                <p className="text-sm font-black text-slate-800">{match?.name || nome}</p>
+                                <p className="text-[10px] font-bold text-orange-600 uppercase tracking-widest">{e.cargoInferido}</p>
+                                {match?.email && (
+                                  <p className="text-xs text-slate-500 mt-1">{Array.isArray(match.email) ? match.email.map(e => e.value || e).join(', ') : match.email}</p>
+                                )}
+                                {match?.linkedin && (
+                                  <a href={match.linkedin} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 underline ml-1">LinkedIn</a>
+                                )}
+                                {match?.tags && (
+                                  <span className="ml-2 text-xs bg-slate-200 px-2 py-0.5 rounded">{match.tags}</span>
+                                )}
+                                {match?.blacklist && (
+                                  <span className="ml-2 text-xs bg-red-200 text-red-700 px-2 py-0.5 rounded">Blacklisted</span>
+                                )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -1076,6 +1317,250 @@ const App = () => {
                 </div>
               )}
 
+            </div>
+          )}
+
+          {/* ABA: PLAYBOOK DE AÇÃO */}
+          {activeTab === 'playbook' && analysis && (
+            <div className="max-w-6xl mx-auto space-y-8 fade-in">
+
+              {/* MENSAGENS PERSONALIZADAS */}
+              <div className="card p-8">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-branddi-cyan/10 text-branddi-cyan rounded-lg flex items-center justify-center"><Send size={20} /></div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg">Mensagens Prontas para Enviar</h3>
+                    <p className="text-xs text-slate-500">Copie e envie — personalizadas com o contexto deste deal.</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {/* Email */}
+                  {analysis.mensagensPersonalizadas?.email && (
+                    <div className="bg-slate-50 rounded-xl p-5 border border-slate-200 hover:border-branddi-cyan transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Mail size={16} className="text-blue-600" />
+                          <span className="text-xs font-black text-blue-600 uppercase">E-mail</span>
+                        </div>
+                        <button onClick={() => copyToClipboard(`Assunto: ${analysis.mensagensPersonalizadas.email.assunto}\n\n${analysis.mensagensPersonalizadas.email.corpo}`)} className="text-xs bg-white border border-slate-200 px-2 py-1 rounded font-bold hover:bg-slate-100 transition-colors flex items-center gap-1"><Copy size={12} /> Copiar</button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-1">Para: {analysis.mensagensPersonalizadas.email.destinatario}</p>
+                      <p className="text-xs font-bold text-slate-700 mb-2">Assunto: {analysis.mensagensPersonalizadas.email.assunto}</p>
+                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">{analysis.mensagensPersonalizadas.email.corpo}</p>
+                    </div>
+                  )}
+
+                  {/* WhatsApp */}
+                  {analysis.mensagensPersonalizadas?.whatsapp && (
+                    <div className="bg-emerald-50/50 rounded-xl p-5 border border-emerald-200 hover:border-emerald-400 transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Phone size={16} className="text-emerald-600" />
+                          <span className="text-xs font-black text-emerald-600 uppercase">WhatsApp</span>
+                        </div>
+                        <button onClick={() => copyToClipboard(analysis.mensagensPersonalizadas.whatsapp.mensagem)} className="text-xs bg-white border border-slate-200 px-2 py-1 rounded font-bold hover:bg-slate-100 transition-colors flex items-center gap-1"><Copy size={12} /> Copiar</button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Para: {analysis.mensagensPersonalizadas.whatsapp.destinatario}</p>
+                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{analysis.mensagensPersonalizadas.whatsapp.mensagem}</p>
+                    </div>
+                  )}
+
+                  {/* LinkedIn */}
+                  {analysis.mensagensPersonalizadas?.linkedin && (
+                    <div className="bg-blue-50/50 rounded-xl p-5 border border-blue-200 hover:border-blue-400 transition-colors">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Linkedin size={16} className="text-blue-700" />
+                          <span className="text-xs font-black text-blue-700 uppercase">LinkedIn</span>
+                        </div>
+                        <button onClick={() => copyToClipboard(analysis.mensagensPersonalizadas.linkedin.mensagem)} className="text-xs bg-white border border-slate-200 px-2 py-1 rounded font-bold hover:bg-slate-100 transition-colors flex items-center gap-1"><Copy size={12} /> Copiar</button>
+                      </div>
+                      <p className="text-[10px] text-slate-400 uppercase tracking-wider mb-2">Para: {analysis.mensagensPersonalizadas.linkedin.destinatario}</p>
+                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{analysis.mensagensPersonalizadas.linkedin.mensagem}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* CONTORNOS DE OBJEÇÕES PERSONALIZADOS */}
+              <div className="card p-8 border-t-4 border-orange-500">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="w-10 h-10 bg-orange-50 text-orange-600 rounded-lg flex items-center justify-center"><Shield size={20} /></div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-lg">Contornos de Objeções</h3>
+                    <p className="text-xs text-slate-500">Argumentos personalizados com dados reais deste deal.</p>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  {analysis.contornosObjecoes?.length > 0 ? analysis.contornosObjecoes.map((item, i) => (
+                    <div key={i} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <div className="bg-red-50 px-5 py-3 border-b border-red-100">
+                        <div className="flex items-center gap-2">
+                          <AlertCircle size={14} className="text-red-500" />
+                          <span className="text-sm font-bold text-red-800">Objeção: "{item.objecao}"</span>
+                        </div>
+                      </div>
+                      <div className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Argumento de Contorno</p>
+                        <p className="text-sm text-slate-700 leading-relaxed">{item.contornoPersonalizado}</p>
+                        {item.dadosDoDeal && (
+                          <div className="mt-3 bg-slate-50 p-3 rounded-lg">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Dados do Deal</p>
+                            <p className="text-xs text-slate-600">{item.dadosDoDeal}</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma objeção identificada para contornar.</p></div>}
+                </div>
+              </div>
+
+              {/* PRONTIDÃO PARA REUNIÃO */}
+              {analysis.prontidaoReuniao && (
+                <div className="card p-8 border-t-4 border-branddi-navy">
+                  <div className="flex items-center gap-3 mb-6">
+                    <div className="w-10 h-10 bg-branddi-navy/10 text-branddi-navy rounded-lg flex items-center justify-center"><FileText size={20} /></div>
+                    <div>
+                      <h3 className="font-black text-slate-800 text-lg">Briefing Pré-Reunião</h3>
+                      <p className="text-xs text-slate-500">Tudo o que você precisa saber antes de entrar na call.</p>
+                    </div>
+                    <button onClick={() => copyToClipboard(`BRIEFING PRÉ-REUNIÃO\n\nResumo: ${analysis.prontidaoReuniao.resumoExecutivo}\n\nPontos a discutir:\n${analysis.prontidaoReuniao.pontosDiscutir?.map((p,i) => `${i+1}. ${p}`).join('\n')}\n\nPerguntas estratégicas:\n${analysis.prontidaoReuniao.perguntasEstrategicas?.map((p,i) => `${i+1}. ${p}`).join('\n')}\n\nArmadilhas a evitar:\n${analysis.prontidaoReuniao.armadilhasEvitar?.map((p,i) => `- ${p}`).join('\n')}\n\nStatus dos decisores: ${analysis.prontidaoReuniao.statusDecisores}`)} className="ml-auto text-xs bg-branddi-navy text-white px-3 py-1.5 rounded-lg font-bold hover:bg-slate-800 transition-colors flex items-center gap-1"><Copy size={12} /> Copiar Briefing</button>
+                  </div>
+
+                  <div className="bg-slate-50 p-5 rounded-xl border-l-4 border-branddi-cyan mb-6">
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Resumo Executivo</p>
+                    <p className="text-sm text-slate-700 leading-relaxed">{analysis.prontidaoReuniao.resumoExecutivo}</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Pontos Obrigatórios para Discutir</p>
+                      <div className="space-y-2">
+                        {analysis.prontidaoReuniao.pontosDiscutir?.map((ponto, i) => (
+                          <div key={i} className="flex items-start gap-3 bg-white p-3 rounded-lg border border-slate-100">
+                            <div className="w-6 h-6 rounded bg-branddi-cyan/20 text-branddi-cyan flex items-center justify-center font-bold text-xs shrink-0">{i + 1}</div>
+                            <span className="text-sm text-slate-700">{ponto}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Perguntas Estratégicas</p>
+                      <div className="space-y-2">
+                        {analysis.prontidaoReuniao.perguntasEstrategicas?.map((pergunta, i) => (
+                          <div key={i} className="flex items-start gap-3 bg-white p-3 rounded-lg border border-slate-100">
+                            <span className="text-branddi-cyan font-bold shrink-0">?</span>
+                            <span className="text-sm text-slate-700">{pergunta}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                    <div className="bg-red-50/50 p-5 rounded-xl border border-red-100">
+                      <p className="text-xs font-bold text-red-400 uppercase tracking-wider mb-3">Armadilhas a Evitar</p>
+                      <div className="space-y-2">
+                        {analysis.prontidaoReuniao.armadilhasEvitar?.map((arm, i) => (
+                          <div key={i} className="flex items-start gap-2">
+                            <ShieldAlert size={14} className="text-red-400 mt-0.5 shrink-0" />
+                            <span className="text-xs text-red-700">{arm}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-900 p-5 rounded-xl text-white">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Status dos Decisores</p>
+                      <p className="text-sm leading-relaxed">{analysis.prontidaoReuniao.statusDecisores}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
+          {/* ABA: DEALS SALVOS */}
+          {activeTab === 'deals' && (
+            <div className="max-w-6xl mx-auto fade-in">
+              <SectionTitle title="Deals Salvos" subtitle="Lista dos negócios já analisados pela IA, ordenados por Health Score." />
+              <div className="flex justify-end mb-4">
+                <button onClick={fetchSavedDeals} className="flex items-center gap-2 bg-branddi-cyan text-branddi-navy px-4 py-2 rounded-lg text-sm font-bold hover:bg-branddi-cyan/80 transition-all">
+                  <RefreshCw size={16} /> Atualizar Lista
+                </button>
+              </div>
+              {loadingDeals && (
+                <div className="flex items-center justify-center gap-2 text-slate-500 py-12"><Loader2 className="animate-spin" size={24} /> Carregando deals...</div>
+              )}
+              {dealsError && (
+                <div className="bg-red-50 border border-red-200 p-4 rounded-xl text-red-700 font-bold">{dealsError}</div>
+              )}
+              {!loadingDeals && !dealsError && (
+                savedDeals && savedDeals.length > 0 ? (
+                  <div className="card overflow-hidden">
+                    <table className="w-full text-left">
+                      <thead className="bg-slate-50 border-b border-slate-200">
+                        <tr>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">ID</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Título do Deal</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Health Score</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Sentimento</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Dias Aberto</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Dias s/ Contato</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Atualizado</th>
+                          <th className="py-3 px-4 text-xs font-bold text-slate-500 uppercase">Ações</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {savedDeals.map((deal, idx) => {
+                          try {
+                            return (
+                              <tr key={deal.deal_id || idx} className="hover:bg-slate-50 transition-colors">
+                                <td className="py-3 px-4 text-xs text-slate-400 font-mono">{deal.deal_id || '-'}</td>
+                                <td className="py-3 px-4 font-bold text-branddi-navy">{deal.deal_title || <span className="text-slate-400 italic text-xs">Sem título</span>}</td>
+                                <td className="py-3 px-4">
+                                  <span className={`font-black text-lg ${deal.analise_ia?.score > 70 ? 'text-emerald-600' : deal.analise_ia?.score > 40 ? 'text-orange-600' : 'text-red-600'}`}>{deal.analise_ia?.score ?? '-'}</span>
+                                </td>
+                                <td className="py-3 px-4">
+                                  <span className={`px-3 py-1 rounded-full text-xs font-bold ${deal.analise_ia?.sentimento === 'Positivo' ? 'bg-emerald-100 text-emerald-700' : deal.analise_ia?.sentimento === 'Negativo' ? 'bg-red-100 text-red-700' : 'bg-slate-200 text-slate-700'}`}>{deal.analise_ia?.sentimento ?? '-'}</span>
+                                </td>
+                                <td className="py-3 px-4 text-slate-700">{deal.metricas?.daysOpen ?? '-'}</td>
+                                <td className="py-3 px-4 text-slate-700">{deal.metricas?.daysInactive ?? '-'}</td>
+                                <td className="py-3 px-4 text-slate-500 text-xs">{deal.atualizado_em ? new Date(deal.atualizado_em).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' }) : '-'}</td>
+                                <td className="py-3 px-4">
+                                  <button
+                                    className="bg-branddi-cyan text-branddi-navy px-3 py-1 rounded font-bold text-xs hover:bg-branddi-cyan/80 transition-all"
+                                    onClick={() => {
+                                      setDealId(deal.deal_id);
+                                      setDealTitle(deal.deal_title);
+                                      setAnalysis(deal.analise_ia);
+                                      setHardMetrics(deal.metricas);
+                                      setRawExtractedData(deal.dados_brutos || '');
+                                      setActiveTab('dashboard');
+                                    }}
+                                  >Ver Análise</button>
+                                </td>
+                              </tr>
+                            );
+                          } catch (err) {
+                            console.error('Erro ao renderizar deal:', deal, err);
+                            return (
+                              <tr key={idx} className="bg-red-50">
+                                <td colSpan={8} className="text-red-700 font-bold py-4 text-center">Erro ao renderizar este deal.</td>
+                              </tr>
+                            );
+                          }
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="bg-slate-50 border border-slate-200 p-8 rounded-xl text-slate-500 font-bold text-center mt-8">Nenhum deal salvo encontrado no Supabase.</div>
+                )
+              )}
             </div>
           )}
 
