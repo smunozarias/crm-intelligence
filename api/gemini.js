@@ -172,8 +172,7 @@ export default async function handler(req, res) {
           equipeEmpresa: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, email: { type: "STRING" }, cargoInferido: { type: "STRING" } } } },
           equipeAgencia: { type: "ARRAY", items: { type: "OBJECT", properties: { nome: { type: "STRING" }, email: { type: "STRING" }, nomeAgencia: { type: "STRING" } } } }
         }
-      }
-    },
+      },
       mensagensPersonalizadas: {
         type: "OBJECT",
         properties: {
