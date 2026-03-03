@@ -200,32 +200,54 @@ export default async function handler(req, res) {
     required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia", "scoringDetalhado"]
   };
 
-  try {
-    const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model.trim()}:generateContent?key=${activeApiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{ text: `Analisa este histórico do CRM:\n\n${historyText}` }]
-        }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: {
-          responseMimeType: "application/json",
-          responseSchema: responseSchema
-        }
-      })
-    });
+  const MAX_RETRIES = 3;
+  const requestBody = JSON.stringify({
+    contents: [{
+      parts: [{ text: `Analisa este histórico do CRM:\n\n${historyText}` }]
+    }],
+    systemInstruction: { parts: [{ text: systemPrompt }] },
+    generationConfig: {
+      responseMimeType: "application/json",
+      responseSchema: responseSchema
+    }
+  });
 
-    if (!geminiRes.ok) {
-      const errorData = await geminiRes.json();
-      return res.status(geminiRes.status).json({
-        error: errorData.error?.message || "Erro na API Gemini"
+  try {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      const geminiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model.trim()}:generateContent?key=${activeApiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody
       });
+
+      if (geminiRes.ok) {
+        const result = await geminiRes.json();
+        console.log(`Gemini API success (attempt ${attempt})`);
+        return res.status(200).json(result);
+      }
+
+      const errorData = await geminiRes.json();
+      const errorMsg = errorData.error?.message || "Erro na API Gemini";
+      lastError = { status: geminiRes.status, message: errorMsg };
+
+      // Retry only on rate limit (429) or server errors (5xx)
+      const isRetryable = geminiRes.status === 429 || geminiRes.status >= 500;
+      if (isRetryable && attempt < MAX_RETRIES) {
+        // Extract wait time from error message or default to 25s
+        const waitMatch = errorMsg.match(/retry in ([\d.]+)s/i);
+        const waitSecs = waitMatch ? Math.ceil(parseFloat(waitMatch[1])) + 2 : 25;
+        console.log(`Rate limited. Waiting ${waitSecs}s before retry ${attempt + 1}/${MAX_RETRIES}...`);
+        await new Promise(resolve => setTimeout(resolve, waitSecs * 1000));
+        continue;
+      }
+
+      // Non-retryable error or last attempt
+      return res.status(geminiRes.status).json({ error: errorMsg });
     }
 
-    const result = await geminiRes.json();
-    console.log("Gemini API success");
-    return res.status(200).json(result);
+    return res.status(lastError?.status || 500).json({ error: lastError?.message || "Erro desconhecido" });
 
   } catch (error) {
     console.error("Gemini Route Error:", error);
