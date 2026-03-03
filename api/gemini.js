@@ -87,7 +87,7 @@ export default async function handler(req, res) {
         1. Inteligência:
         - Analise o momento atual do negócio, considerando estagnação, quantidade e qualidade das interações recentes.
         - Identifique qual produto Branddi é relevante para este deal (BB, Golpes, VM, BBP) com base nas dores e contexto.
-        - Identifique e resuma as principais dores do lead, objeções ativas, sentimento predominante ("Positivo", "Neutro" ou "Negativo") e sugira próximos passos práticos para avançar o deal.
+        - Identifique e resuma as principais dores do lead, objeções ativas, sentimento predominante (SEMPRE responda EXATAMENTE com uma destas 3 palavras: "Positivo", "Neutro" ou "Negativo" — sem parênteses, explicações ou contexto adicional) e sugira próximos passos práticos para avançar o deal.
         - Cruze as objeções encontradas com os contornos conhecidos da Branddi listados acima e sugira a resposta ideal.
         - Gere um score de 0 a 100, considerando o engajamento recente.
         - Faça auditoria ortográfica e gramatical nas notas do vendedor, apontando erros relevantes.
@@ -125,7 +125,6 @@ export default async function handler(req, res) {
         - prontidaoReuniao: Gere um briefing completo pré-reunião com: resumo executivo do momento, 3-5 pontos obrigatórios para discutir, perguntas estratégicas para fazer ao lead, armadilhas a evitar, e status atualizado dos decisores.
         - avaliacaoSLA: Verifique se os SLAs de follow-up estão sendo cumpridos (SDR: 3 dias, Closer: semanal). Informe dias desde o último contato real e classifique como "Em dia", "Atrasado" ou "Crítico".
         - gatilhosUrgencia: Liste alertas contextuais ativos para este deal (fraude ativa, sazonalidade, budget derretendo, stakeholder mudando, etc.). Classifique cada gatilho por nível: "Crítico", "Alto" ou "Médio".
-        - scoringDetalhado: Quebre o score geral em 4 sub-scores de 0 a 100: engajamento (frequência e qualidade das interações), fitICP (aderência ao perfil ideal), momento (timing e urgência), risco (probabilidade de perda).
 
         Regras e Observações Técnicas:
         - Colar histórico do WhatsApp é procedimento padrão, nunca aponte como erro.
@@ -194,10 +193,9 @@ export default async function handler(req, res) {
         }
       },
       avaliacaoSLA: { type: "OBJECT", properties: { statusSLA: { type: "STRING" }, diasDesdeUltimoContato: { type: "INTEGER" }, detalhes: { type: "STRING" } } },
-      gatilhosUrgencia: { type: "ARRAY", items: { type: "OBJECT", properties: { gatilho: { type: "STRING" }, nivel: { type: "STRING" }, contexto: { type: "STRING" } } } },
-      scoringDetalhado: { type: "OBJECT", properties: { engajamento: { type: "INTEGER" }, fitICP: { type: "INTEGER" }, momento: { type: "INTEGER" }, risco: { type: "INTEGER" } } }
+      gatilhosUrgencia: { type: "ARRAY", items: { type: "OBJECT", properties: { gatilho: { type: "STRING" }, nivel: { type: "STRING" }, contexto: { type: "STRING" } } } }
     },
-    required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia", "scoringDetalhado"]
+    required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia"]
   };
 
   const MAX_RETRIES = 3;

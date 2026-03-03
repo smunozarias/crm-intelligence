@@ -194,8 +194,9 @@ const App = () => {
       return false;
     }).length;
 
-    const meetingsOutbound = flowItems.filter(i => i.object === 'activity' && i.data?.type === 'reuniao_01' && i.data?.done).length;
-    const meetingsSales = flowItems.filter(i => i.object === 'activity' && i.data?.type === 'meeting' && i.data?.done).length;
+    const isActivityDone = (item) => item.data?.done === true || item.data?.done === 1 || item.data?.done === '1' || item.data?.done === 'true';
+    const meetingsOutbound = flowItems.filter(i => i.object === 'activity' && (i.data?.type === 'reuniao_01' || (i.data?.type || '').toLowerCase().includes('reuniao')) && isActivityDone(i)).length;
+    const meetingsSales = flowItems.filter(i => i.object === 'activity' && (i.data?.type === 'meeting' || (i.data?.type || '').toLowerCase() === 'meeting') && isActivityDone(i)).length;
 
     const metrics = {
       daysOpen: Math.max(0, daysOpen),
@@ -843,7 +844,7 @@ const App = () => {
               {activeTab === 'dashboard' && (
                     <div className="space-y-8 fade-in">
                       {/* ...existing code... */}
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="card p-6 flex flex-col justify-between h-40">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Health Score</p>
                       <div className="mt-2 flex items-baseline gap-1">
@@ -863,10 +864,12 @@ const App = () => {
                     <div className="card p-6 flex flex-col justify-between h-40">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Sentimento</p>
                       <div className="mt-2 flex items-center gap-3">
-                        {analysis.sentimento === 'Positivo' ? <Zap className="text-orange-500" size={32} fill="#f97316" /> : <MessageSquare size={32} className="text-slate-400" />}
-                        <span className="text-2xl font-black text-slate-800">{analysis.sentimento}</span>
+                        {(analysis.sentimento || '').startsWith('Positivo') ? <Zap className="text-orange-500" size={28} fill="#f97316" /> : (analysis.sentimento || '').startsWith('Negativo') ? <AlertCircle size={28} className="text-red-500" /> : <MessageSquare size={28} className="text-slate-400" />}
+                        <span className={`text-2xl font-black ${(analysis.sentimento || '').startsWith('Positivo') ? 'text-emerald-600' : (analysis.sentimento || '').startsWith('Negativo') ? 'text-red-600' : 'text-slate-800'}`}>{(analysis.sentimento || '').split('(')[0].split(' -')[0].split(',')[0].trim()}</span>
                       </div>
-                      <p className="text-[10px] text-slate-400 font-medium">Predição baseada em 100% das notas</p>
+                      {analysis.sentimento && analysis.sentimento.length > 10 && (
+                        <p className="text-[10px] text-slate-400 font-medium leading-tight line-clamp-2 mt-1" title={analysis.sentimento}>{analysis.sentimento}</p>
+                      )}
                     </div>
 
                     <div className="card p-6 flex flex-col justify-between h-40">
@@ -878,18 +881,6 @@ const App = () => {
                       <div className="flex items-center gap-1.5 mt-4">
                         <TrendingUp size={14} className="text-slate-300" />
                         <span className="text-[10px] font-bold text-slate-400">Pipeline Performance</span>
-                      </div>
-                    </div>
-
-                    <div className="card p-6 flex flex-col justify-between h-40 bg-slate-900 text-white border-none shadow-orange-200">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Inatividade</p>
-                      <div className="mt-2 flex items-baseline gap-1">
-                        <span className={`text-4xl font-black ${hardMetrics?.daysInactive > 10 ? 'text-orange-400' : 'text-white'}`}>{hardMetrics?.daysInactive}</span>
-                        <span className="text-slate-500 text-sm font-bold ml-1">DIAS</span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-4">
-                        <div className={`w-2 h-2 rounded-full ${hardMetrics?.daysInactive > 10 ? 'bg-orange-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                        <span className="text-[10px] font-bold text-slate-400">{hardMetrics?.daysInactive > 10 ? 'ESTAGNADO' : 'ENGAJAMENTO OK'}</span>
                       </div>
                     </div>
 
@@ -1020,26 +1011,7 @@ const App = () => {
                     )}
                   </div>
 
-                  {/* Scoring Detalhado */}
-                  {analysis.scoringDetalhado && (
-                    <div className="card p-6">
-                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Scoring Detalhado</p>
-                      <div className="grid grid-cols-4 gap-4">
-                        {[{label: 'Engajamento', key: 'engajamento', color: 'bg-blue-500'}, {label: 'Fit ICP', key: 'fitICP', color: 'bg-emerald-500'}, {label: 'Momento', key: 'momento', color: 'bg-orange-500'}, {label: 'Risco', key: 'risco', color: 'bg-red-500'}].map(item => (
-                          <div key={item.key} className="text-center">
-                            <p className="text-xs font-bold text-slate-500 uppercase mb-2">{item.label}</p>
-                            <div className="relative w-16 h-16 mx-auto">
-                              <svg className="w-16 h-16 -rotate-90" viewBox="0 0 36 36">
-                                <path className="text-slate-100" stroke="currentColor" strokeWidth="3" fill="none" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                                <path className={`${item.color.replace('bg-', 'text-')}`} stroke="currentColor" strokeWidth="3" strokeLinecap="round" fill="none" strokeDasharray={`${analysis.scoringDetalhado[item.key]}, 100`} d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" />
-                              </svg>
-                              <span className="absolute inset-0 flex items-center justify-center text-sm font-black text-slate-800">{analysis.scoringDetalhado[item.key]}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+
                 </div>
               )}
 
