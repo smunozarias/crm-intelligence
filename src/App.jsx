@@ -209,70 +209,6 @@ const App = () => {
     return metrics;
   };
 
-  // Função para resumir localmente o histórico do Deal
-  const resumirHistorico = (allFlowItems) => {
-    // Limites por tipo
-    const LIMITE_EMAILS = 10;
-    const LIMITE_REUNIOES = 5;
-    const LIMITE_NOTAS = 5;
-    // Separar por tipo
-    const emails = [];
-    const reunioes = [];
-    const notas = [];
-    const outros = [];
-    allFlowItems.forEach(item => {
-      if (item.object === 'mailThread' || item.object === 'mailMessage') {
-        emails.push(item);
-      } else if (item.object === 'activity' && (item.data?.type === 'meeting' || item.data?.type === 'reuniao_01')) {
-        reunioes.push(item);
-      } else if (item.object === 'note') {
-        notas.push(item);
-      } else {
-        outros.push(item);
-      }
-    });
-    // Limitar quantidade
-    const emailsLim = emails.slice(-LIMITE_EMAILS);
-    const reunioesLim = reunioes.slice(-LIMITE_REUNIOES);
-    const notasLim = notas.slice(-LIMITE_NOTAS);
-    // Resumir notas longas
-    const resumirTexto = (txt) => {
-      if (!txt) return '';
-      if (txt.length > 400) return txt.slice(0, 200) + ' ... ' + txt.slice(-200);
-      return txt;
-    };
-    // Montar texto
-    let resumo = '';
-    if (emailsLim.length > 0) {
-      resumo += '\n--- ÚLTIMOS E-MAILS ---\n';
-      emailsLim.forEach(e => {
-        resumo += `[${e.add_time}] Assunto: ${e.data?.subject || ''}\n`;
-        if (e.data?.snippet) resumo += `   Resumo: ${resumirTexto(e.data.snippet)}\n`;
-      });
-    }
-    if (reunioesLim.length > 0) {
-      resumo += '\n--- ÚLTIMAS REUNIÕES ---\n';
-      reunioesLim.forEach(r => {
-        resumo += `[${r.add_time}] Tipo: ${r.data?.type} | Assunto: ${r.data?.subject} | Estado: ${r.data?.done ? 'Concluída' : 'Pendente'}\n`;
-        if (typeof r.data?.note === 'string') resumo += `   Detalhes: ${resumirTexto(r.data.note)}\n`;
-      });
-    }
-    if (notasLim.length > 0) {
-      resumo += '\n--- ÚLTIMAS NOTAS ---\n';
-      notasLim.forEach(n => {
-        const cleanNote = typeof n.data?.content === 'string' ? n.data.content.replace(/<[^>]*>?/gm, '') : '';
-        resumo += `[${n.add_time}] NOTA: ${resumirTexto(cleanNote)}\n`;
-      });
-    }
-    if (outros.length > 0) {
-      resumo += '\n--- OUTRAS INTERAÇÕES (resumidas) ---\n';
-      outros.slice(-5).forEach(o => {
-        resumo += `[${o.add_time}] Tipo: ${o.object}\n`;
-      });
-    }
-    return resumo;
-  };
-
   const fetchPipedriveData = async (forceRefresh = false) => {
     try {
       setStatus("fetching");
@@ -384,9 +320,6 @@ const App = () => {
 
       const metrics = calculateHardMetrics(dealData, allFlowItems);
 
-      // Resumir histórico localmente para economizar tokens
-      let resumoHistorico = resumirHistorico(allFlowItems);
-
       let compiledHistory = `--- DADOS DO NEGÓCIO E MÉTRICAS EXATAS ---\n`;
       compiledHistory += `ID do Negócio: ${dealId}\n`;
       compiledHistory += `Título: ${dealData.data.title}\n`;
@@ -402,7 +335,28 @@ const App = () => {
         });
       }
 
-      compiledHistory += resumoHistorico;
+      compiledHistory += `\n--- HISTÓRICO DE ATIVIDADES ---\n`;
+
+      allFlowItems.forEach(item => {
+        let dateStr = "Data desconhecida";
+        try { dateStr = new Date(parsePipedriveDate(item.add_time)).toLocaleDateString('pt-PT'); } catch (e) { }
+
+        if (item.object === 'note') {
+          const cleanNote = typeof item.data?.content === 'string' ? item.data.content.replace(/<[^>]*>?/gm, '') : '';
+          compiledHistory += `[${dateStr}] NOTA: ${cleanNote}\n`;
+        }
+        else if (item.object === 'activity') {
+          compiledHistory += `[${dateStr}] ATIVIDADE | Tipo: [${item.data?.type}] | Assunto: [${item.data?.subject}] | Estado: ${item.data?.done ? 'Concluída' : 'Pendente'}\n`;
+          if (typeof item.data?.note === 'string') {
+            const cleanActNote = item.data.note.replace(/<[^>]*>?/gm, '');
+            compiledHistory += `   Detalhes: ${cleanActNote}\n`;
+          }
+        }
+        else if (item.object === 'mailThread' || item.object === 'mailMessage') {
+          compiledHistory += `[${dateStr}] E-MAIL: Assunto: ${item.data?.subject}\n`;
+          if (item.data?.snippet) compiledHistory += `   Resumo: ${item.data.snippet}\n`;
+        }
+      });
 
       setRawExtractedData(compiledHistory);
       setDealTitle(dealData.data.title);
