@@ -90,7 +90,7 @@ export default async function handler(req, res) {
         - Identifique e resuma as principais dores do lead, objeções ativas, sentimento predominante (SEMPRE responda EXATAMENTE com uma destas 3 palavras: "Positivo", "Neutro" ou "Negativo" — sem parênteses, explicações ou contexto adicional) e sugira próximos passos práticos para avançar o deal.
         - Cruze as objeções encontradas com os contornos conhecidos da Branddi listados acima e sugira a resposta ideal.
         - Gere um score de 0 a 100, considerando o engajamento recente.
-        - Faça auditoria ortográfica e gramatical nas notas do vendedor, apontando erros relevantes.
+        - Faça auditoria ortográfica e gramatical APENAS nos e-mails e históricos de conversa (WhatsApp, LinkedIn) do vendedor, apontando erros relevantes. NÃO considere notas internas para auditoria.
         - Inclua informações sobre a empresa do lead: contexto geral, momento atual, desafios, oportunidades, e qualquer menção relevante no histórico.
         - Alerte sobre sazonalidades próximas que justifiquem urgência na abordagem.
 

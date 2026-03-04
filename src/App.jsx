@@ -792,7 +792,6 @@ const App = () => {
               {/* DASHBOARD TAB */}
               {activeTab === 'dashboard' && (
                     <div className="space-y-8 fade-in">
-                      {/* ...existing code... */}
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div className="card p-6 flex flex-col justify-between h-40">
                       <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Health Score</p>
@@ -1042,7 +1041,6 @@ const App = () => {
               {/* TAB PROSPECCAO */}
               {activeTab === 'prospeccao' && (
                 <div className="space-y-8 fade-in">
-                  // ...existing code...
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                     <div className="card p-8 border-l-8 border-emerald-500">
                       <SectionTitle title="Mapeamento de Prioridade de Contato" subtitle="Quem o vendedor deve focar agora." />
@@ -1083,22 +1081,9 @@ const App = () => {
                               {Array.isArray(area.pessoas) && area.pessoas.length > 0
                                 ? area.pessoas.map((p, idx) => {
                                     const nome = typeof p === 'string' ? p : (p.nome || p.name || '');
-                                    const match = detailedParticipants.find(dp => (dp.name && dp.name.toLowerCase() === nome.toLowerCase()));
                                     return (
                                       <div key={idx} className="mb-1">
-                                        <span>{match?.name || nome}</span>
-                                        {match?.email && (
-                                          <span className="ml-2 text-xs text-slate-500">{Array.isArray(match.email) ? match.email.map(e => e.value || e).join(', ') : match.email}</span>
-                                        )}
-                                        {match?.linkedin && (
-                                          <a href={match.linkedin} target="_blank" rel="noopener noreferrer" className="ml-2 text-xs text-blue-600 underline">LinkedIn</a>
-                                        )}
-                                        {match?.tags && (
-                                          <span className="ml-2 text-xs bg-slate-200 px-2 py-0.5 rounded">{match.tags}</span>
-                                        )}
-                                        {match?.blacklist && (
-                                          <span className="ml-2 text-xs bg-red-200 text-red-700 px-2 py-0.5 rounded">Blacklisted</span>
-                                        )}
+                                        <span>{nome}</span>
                                       </div>
                                     );
                                   })
@@ -1133,7 +1118,7 @@ const App = () => {
                   </div>
 
                   <div className="card p-8">
-                    <SectionTitle title="Auditoria de Comunicação (Ortografia e Gramática)" subtitle="Foco nas notas e e-mails do vendedor." />
+                    <SectionTitle title="Auditoria de Comunicação (Ortografia e Gramática)" subtitle="Foco nos e-mails e conversas do vendedor." />
                     <div className="space-y-2 mt-4">
                       {analysis.errosOrtografia?.length > 0 ? analysis.errosOrtografia.map((err, i) => (
                         <div key={i} className="text-sm p-3 bg-slate-50 text-slate-700 rounded-lg flex items-center gap-2">
