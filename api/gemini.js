@@ -127,6 +127,9 @@ export default async function handler(req, res) {
         - gatilhosUrgencia: Liste alertas contextuais ativos para este deal (fraude ativa, sazonalidade, budget derretendo, stakeholder mudando, etc.). Classifique cada gatilho por nível: "Crítico", "Alto" ou "Médio".
 
         Regras e Observações Técnicas:
+        - IMPORTANTE: O campo "DATA DE REFERÊNCIA (HOJE)" no início do histórico indica a data de hoje. Use essa data como referência absoluta para calcular dias sem contato, interpretar datas de atividades e avaliar SLAs. NUNCA assuma outra data.
+        - PRIORIZE AS INTERAÇÕES MAIS RECENTES: Dê mais peso às interações dos últimos 7-14 dias ao gerar o resumo, health score e insights. Se houver conversas de hoje ou desta semana, elas devem ser o foco principal da análise.
+        - O PARTICIPANTES VINCULADOS reflete APENAS os contatos reais do deal conforme o CRM. Não invente participantes que não estejam listados. Se o histórico menciona nomes antigos em notas/emails, são referências históricas, não participantes ativos.
         - Colar histórico do WhatsApp é procedimento padrão, nunca aponte como erro.
         - Utilize os campos técnicos do Pipedrive para embasar suas respostas (ex: add_time, done, type, subject, note, participants, status, custom fields).
         - Siga o schema de resposta JSON fornecido, preenchendo todos os campos obrigatórios.

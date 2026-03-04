@@ -312,7 +312,10 @@ const App = () => {
 
       const metrics = calculateHardMetrics(dealData, allFlowItems);
 
-      let compiledHistory = `--- DADOS DO NEGÓCIO E MÉTRICAS EXATAS ---\n`;
+      const dataAtual = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
+      let compiledHistory = `--- DATA DE REFERÊNCIA (HOJE) ---\n`;
+      compiledHistory += `${dataAtual}\n\n`;
+      compiledHistory += `--- DADOS DO NEGÓCIO E MÉTRICAS EXATAS ---\n`;
       compiledHistory += `ID do Negócio: ${dealId}\n`;
       compiledHistory += `Título: ${dealData.data.title}\n`;
       compiledHistory += `Dias no Funil (Aberto há): ${metrics.daysOpen} dias\n`;
