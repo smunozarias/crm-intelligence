@@ -292,6 +292,9 @@ const App = () => {
           setRawExtractedData(cacheData.dados_brutos);
           setAnalysis(cacheData.analise_ia);
           setHardMetrics(cacheData.metricas);
+          if (cacheData.metricas?.participantes) {
+            setDetailedParticipants(cacheData.metricas.participantes);
+          }
 
           // Sempre buscar o título atualizado do Deal
           try {
@@ -358,7 +361,13 @@ const App = () => {
             return p;
           }
         }));
-        participantsData.data = detailedParticipants;
+        // Classificar: Branddi (interno) vs Lead (contato do deal)
+        participantsData.data = detailedParticipants.map(p => {
+          const emails = Array.isArray(p.email) ? p.email.map(e => (e.value || e).toString().toLowerCase()) : [(p.email || '').toLowerCase()];
+          const orgName = (p.org_id?.name || p.org_name || '').toLowerCase();
+          const isBranddi = emails.some(e => e.includes('branddi')) || orgName.includes('branddi');
+          return { ...p, tipo: isBranddi ? 'BRANDDI' : 'LEAD' };
+        });
       }
 
       if (!dealData.success) throw new Error("A API do Pipedrive retornou sucesso=false para este Deal.");
@@ -396,17 +405,36 @@ const App = () => {
 
       compiledHistory += `--- PARTICIPANTES VINCULADOS ---\n`;
       if (participantsData.data && participantsData.data.length > 0) {
-        participantsData.data.forEach(p => {
-          const emails = Array.isArray(p.email) ? p.email.map(e => e.value || e).join(', ') : (p.email || '');
-          compiledHistory += `- Nome: ${p.name || p.person_id?.name} | Email: ${emails}\n`;
-        });
+        const leads = participantsData.data.filter(p => p.tipo === 'LEAD');
+        const branddiTeam = participantsData.data.filter(p => p.tipo === 'BRANDDI');
+
+        compiledHistory += `\n[CONTATOS DO LEAD / EMPRESA CLIENTE]\n`;
+        if (leads.length > 0) {
+          leads.forEach(p => {
+            const emails = Array.isArray(p.email) ? p.email.map(e => e.value || e).join(', ') : (p.email || '');
+            const phones = Array.isArray(p.phone) ? p.phone.map(ph => ph.value || ph).filter(v => v).join(', ') : (p.phone || '');
+            const cargo = p.job_title || '';
+            compiledHistory += `- Nome: ${p.name || p.person_id?.name} | Email: ${emails}${cargo ? ' | Cargo: ' + cargo : ''}${phones ? ' | Tel: ' + phones : ''}\n`;
+          });
+        } else {
+          compiledHistory += `- Nenhum contato do lead identificado\n`;
+        }
+
+        if (branddiTeam.length > 0) {
+          compiledHistory += `\n[EQUIPE BRANDDI - INTERNO, NÃO INCLUIR COMO CONTATO DO LEAD]\n`;
+          branddiTeam.forEach(p => {
+            const emails = Array.isArray(p.email) ? p.email.map(e => e.value || e).join(', ') : (p.email || '');
+            compiledHistory += `- Nome: ${p.name || p.person_id?.name} | Email: ${emails}\n`;
+          });
+        }
       }
 
       compiledHistory += resumoHistorico;
 
       setRawExtractedData(compiledHistory);
       setDealTitle(dealData.data.title);
-      return { compiledHistory, metrics, participants: participantsData.data, title: dealData.data.title };
+      const metricsWithParticipants = { ...metrics, participantes: participantsData.data };
+      return { compiledHistory, metrics: metricsWithParticipants, participants: participantsData.data, title: dealData.data.title };
 
     } catch (err) {
       setStatus("error");
