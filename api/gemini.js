@@ -127,6 +127,8 @@ export default async function handler(req, res) {
         - gatilhosUrgencia: Liste alertas contextuais ativos para este deal (fraude ativa, sazonalidade, budget derretendo, stakeholder mudando, etc.). Classifique cada gatilho por nível: "Crítico", "Alto" ou "Médio".
 
         Regras e Observações Técnicas:
+        - IMPORTANTE: O campo "Data atual (HOJE)" no início do histórico indica a data de hoje. Use essa data como referência para calcular dias sem contato, interpretar datas de atividades e avaliar SLAs. NUNCA assuma outra data.
+        - PRIORIZE AS INTERAÇÕES MAIS RECENTES: O histórico mostra as últimas interações por tipo. Dê mais peso às interações dos últimos 7-14 dias ao gerar o resumo e insights.
         - Colar histórico do WhatsApp é procedimento padrão, nunca aponte como erro.
         - Utilize os campos técnicos do Pipedrive para embasar suas respostas (ex: add_time, done, type, subject, note, participants, status, custom fields).
         - Siga o schema de resposta JSON fornecido, preenchendo todos os campos obrigatórios.

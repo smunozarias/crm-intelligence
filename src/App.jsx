@@ -212,15 +212,23 @@ const App = () => {
   // Função para resumir localmente o histórico do Deal
   const resumirHistorico = (allFlowItems) => {
     // Limites por tipo
-    const LIMITE_EMAILS = 10;
-    const LIMITE_REUNIOES = 5;
-    const LIMITE_NOTAS = 5;
+    const LIMITE_EMAILS = 15;
+    const LIMITE_REUNIOES = 8;
+    const LIMITE_NOTAS = 8;
+
+    // Ordenar TODOS os itens por data (mais antigo → mais recente) para garantir que slice(-N) pega os mais recentes
+    const sortedItems = [...allFlowItems].sort((a, b) => {
+      const dateA = new Date(a.add_time || 0).getTime();
+      const dateB = new Date(b.add_time || 0).getTime();
+      return dateA - dateB;
+    });
+
     // Separar por tipo
     const emails = [];
     const reunioes = [];
     const notas = [];
     const outros = [];
-    allFlowItems.forEach(item => {
+    sortedItems.forEach(item => {
       if (item.object === 'mailThread' || item.object === 'mailMessage') {
         emails.push(item);
       } else if (item.object === 'activity' && (item.data?.type === 'meeting' || item.data?.type === 'reuniao_01')) {
@@ -396,7 +404,11 @@ const App = () => {
       // Resumir histórico localmente para economizar tokens
       let resumoHistorico = resumirHistorico(allFlowItems);
 
-      let compiledHistory = `--- DADOS DO NEGÓCIO E MÉTRICAS EXATAS ---\n`;
+      const dataAtual = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
+      let compiledHistory = `--- DATA DE REFERÊNCIA ---\n`;
+      compiledHistory += `Data atual (HOJE): ${dataAtual}\n`;
+      compiledHistory += `Timestamp: ${new Date().toISOString()}\n\n`;
+      compiledHistory += `--- DADOS DO NEGÓCIO E MÉTRICAS EXATAS ---\n`;
       compiledHistory += `ID do Negócio: ${dealId}\n`;
       compiledHistory += `Título: ${dealData.data.title}\n`;
       compiledHistory += `Dias no Funil (Aberto há): ${metrics.daysOpen} dias\n`;
