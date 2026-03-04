@@ -270,31 +270,23 @@ const App = () => {
       const dealData = await dealRes.json();
       let participantsData = participantsRes.ok ? await participantsRes.json() : { success: false, data: [] };
 
-      // Buscar dados completos de cada participante
+      // Enriquecer participantes com dados já retornados pela API (p.person contém tudo)
       if (participantsData.data && participantsData.data.length > 0) {
-        const detailedParticipants = await Promise.all(participantsData.data.map(async (p) => {
-          const personId = p.person_id?.id || p.id;
-          if (!personId) return p;
-          try {
-            const personRes = await fetch(`/api/pipedrive/persons/${personId}?api_token=${pipedriveToken}`, { method: 'GET', headers: { 'Accept': 'application/json' } });
-            if (!personRes.ok) return p;
-            const personData = await personRes.json();
-            // Merge dados detalhados
-            return {
-              ...p,
-              ...personData.data,
-              email: personData.data?.email || p.email,
-              label: personData.data?.label || p.label,
-              linkedin: personData.data?.linkedin || personData.data?.cf_linkedin || '',
-              tags: personData.data?.label || '',
-              blacklist: personData.data?.blacklist || personData.data?.cf_blacklist || false,
-              // Adicione outros campos customizados conforme necessário
-            };
-          } catch (e) {
-            return p;
-          }
-        }));
-        participantsData.data = detailedParticipants;
+        participantsData.data = participantsData.data.map(p => {
+          const person = p.person || {};
+          return {
+            ...p,
+            name: person.name || p.person_id?.name || p.name,
+            email: person.email || p.person_id?.email || p.email,
+            phone: person.phone || p.person_id?.phone || p.phone,
+            org_name: person.org_name || person.org_id?.name || '',
+            job_title: person.job_title || person['8a759b92f4243c926cfeda450011949ac51a7a95'] || '',
+            linkedin: person['6bc768aa12d302afae99f70f8349fcfe714ca394'] || '',
+            whatsapp: person['8639d6c9321e6de529429d20021623aad637cc1a'] || '',
+            label: person.label || p.label,
+            tags: person.label || '',
+          };
+        });
       }
 
       if (!dealData.success) throw new Error("A API do Pipedrive retornou sucesso=false para este Deal.");
