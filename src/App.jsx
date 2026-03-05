@@ -263,6 +263,7 @@ const App = () => {
 
       const dealUrl = `/api/pipedrive/deals/${dealId}?api_token=${pipedriveToken}`;
       const participantsUrl = `/api/pipedrive/deals/${dealId}/participants?api_token=${pipedriveToken}`;
+      const usersUrl = `/api/pipedrive/users?api_token=${pipedriveToken}`;
 
       setProcessingStep(2);
 
@@ -273,6 +274,16 @@ const App = () => {
       }
 
       const participantsRes = await fetch(participantsUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+      let usersMap = {};
+      try {
+        const usersRes = await fetch(usersUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
+        if (usersRes.ok) {
+          const usersData = await usersRes.json();
+          if (usersData.data) {
+            usersData.data.forEach(u => { usersMap[u.id] = u.name; });
+          }
+        }
+      } catch (e) { console.warn('Could not fetch users:', e); }
       const dealData = await dealRes.json();
       let participantsData = participantsRes.ok ? await participantsRes.json() : { success: false, data: [] };
 
@@ -330,11 +341,28 @@ const App = () => {
       compiledHistory += `Dias sem Contato (Email/WhatsApp/LinkedIn/Call): ${metrics.daysInactive} dias\n`;
       compiledHistory += `Total de Interações Registradas: ${metrics.totalActions}\n\n`;
 
-      compiledHistory += `--- PARTICIPANTES VINCULADOS ---\n`;
+      compiledHistory += `\n--- PARTICIPANTES VINCULADOS ---\n`;
       if (participantsData.data && participantsData.data.length > 0) {
         participantsData.data.forEach(p => {
           const emails = Array.isArray(p.email) ? p.email.map(e => e.value || e).join(', ') : (p.email || '');
           compiledHistory += `- Nome: ${p.name || p.person_id?.name} | Email: ${emails}\n`;
+        });
+      }
+
+      // SDR attribution: count interactions per user
+      const sdrCounts = {};
+      allFlowItems.forEach(item => {
+        const userId = item.data?.user_id || item.data?.creator_user_id || item.user_id;
+        if (userId && usersMap[userId]) {
+          if (!sdrCounts[usersMap[userId]]) sdrCounts[usersMap[userId]] = 0;
+          sdrCounts[usersMap[userId]]++;
+        }
+      });
+      const sdrNames = Object.keys(sdrCounts);
+      if (sdrNames.length > 0) {
+        compiledHistory += `\n--- SDRs QUE TOCARAM ESTE DEAL ---\n`;
+        sdrNames.forEach(name => {
+          compiledHistory += `- ${name} (${sdrCounts[name]} interações)\n`;
         });
       }
 
@@ -344,19 +372,23 @@ const App = () => {
         let dateStr = "Data desconhecida";
         try { dateStr = new Date(parsePipedriveDate(item.add_time)).toLocaleDateString('pt-PT'); } catch (e) { }
 
+        // Get SDR name for attribution
+        const userId = item.data?.user_id || item.data?.creator_user_id || item.user_id;
+        const sdrTag = userId && usersMap[userId] ? `[SDR: ${usersMap[userId]}] ` : '';
+
         if (item.object === 'note') {
           const cleanNote = typeof item.data?.content === 'string' ? item.data.content.replace(/<[^>]*>?/gm, '') : '';
-          compiledHistory += `[${dateStr}] NOTA: ${cleanNote}\n`;
+          compiledHistory += `[${dateStr}] ${sdrTag}NOTA: ${cleanNote}\n`;
         }
         else if (item.object === 'activity') {
-          compiledHistory += `[${dateStr}] ATIVIDADE | Tipo: [${item.data?.type}] | Assunto: [${item.data?.subject}] | Estado: ${item.data?.done ? 'Concluída' : 'Pendente'}\n`;
+          compiledHistory += `[${dateStr}] ${sdrTag}ATIVIDADE | Tipo: [${item.data?.type}] | Assunto: [${item.data?.subject}] | Estado: ${item.data?.done ? 'Concluída' : 'Pendente'}\n`;
           if (typeof item.data?.note === 'string') {
             const cleanActNote = item.data.note.replace(/<[^>]*>?/gm, '');
             compiledHistory += `   Detalhes: ${cleanActNote}\n`;
           }
         }
         else if (item.object === 'mailThread' || item.object === 'mailMessage') {
-          compiledHistory += `[${dateStr}] E-MAIL: Assunto: ${item.data?.subject}\n`;
+          compiledHistory += `[${dateStr}] ${sdrTag}E-MAIL: Assunto: ${item.data?.subject}\n`;
           if (item.data?.snippet) compiledHistory += `   Resumo: ${item.data.snippet}\n`;
         }
       });
@@ -584,6 +616,9 @@ const App = () => {
             <SidebarIcon icon={Search} label="Prospecção" id="prospeccao" active={activeTab === 'prospeccao'} onClick={setActiveTab} />
             <SidebarIcon icon={Users} label="Participantes" id="participantes" active={activeTab === 'participantes'} onClick={setActiveTab} />
             <SidebarIcon icon={BookOpen} label="Playbook" id="playbook" active={activeTab === 'playbook'} onClick={setActiveTab} />
+            {analysis?.analiseComparativaSDRs?.multiploSDRs && (
+              <SidebarIcon icon={Users} label="Análise SDRs" id="sdr-analysis" active={activeTab === 'sdr-analysis'} onClick={setActiveTab} />
+            )}
           </div>
         </nav>
 
@@ -1498,6 +1533,155 @@ const App = () => {
           )}
 
           {/* ABA: DEALS SALVOS */}
+
+          {/* ABA: ANÁLISE COMPARATIVA SDRs */}
+          {activeTab === 'sdr-analysis' && analysis?.analiseComparativaSDRs && (
+            <div className="max-w-6xl mx-auto space-y-8 fade-in">
+
+              {/* HEADER */}
+              <div className="card p-8 bg-gradient-to-r from-branddi-navy to-slate-800">
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-2xl bg-white/10 flex items-center justify-center">
+                    <Users size={28} className="text-branddi-cyan" />
+                  </div>
+                  <div>
+                    <h2 className="text-2xl font-black text-white">Análise Comparativa de SDRs</h2>
+                    <p className="text-sm text-slate-300 mt-1">
+                      {analysis.analiseComparativaSDRs.sdrs?.length || 0} SDRs tocaram este deal — veja quem performou melhor e por quê.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* SDR CARDS */}
+              <div className={`grid grid-cols-1 ${analysis.analiseComparativaSDRs.sdrs?.length === 2 ? 'md:grid-cols-2' : analysis.analiseComparativaSDRs.sdrs?.length >= 3 ? 'md:grid-cols-3' : ''} gap-6`}>
+                {analysis.analiseComparativaSDRs.sdrs?.map((sdr, i) => (
+                  <div key={i} className={`card p-6 border-t-8 ${sdr.classificacao === 'Abordagem Vencedora' ? 'border-emerald-500 bg-emerald-50/20' : 'border-amber-400 bg-amber-50/10'
+                    }`}>
+                    {/* SDR Header */}
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm ${sdr.classificacao === 'Abordagem Vencedora' ? 'bg-emerald-500' : 'bg-amber-500'
+                          }`}>
+                          {sdr.nome?.charAt(0)}
+                        </div>
+                        <div>
+                          <p className="font-black text-slate-800">{sdr.nome}</p>
+                          <p className="text-xs text-slate-500">{sdr.totalInteracoes} interações</p>
+                        </div>
+                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${sdr.classificacao === 'Abordagem Vencedora' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+                        }`}>
+                        {sdr.classificacao === 'Abordagem Vencedora' ? '⭐ Vencedor(a)' : '🔄 A Melhorar'}
+                      </span>
+                    </div>
+
+                    {/* Canais */}
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Canais Utilizados</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sdr.canaisUsados?.map((canal, j) => (
+                          <span key={j} className="bg-slate-100 text-slate-600 text-[10px] font-bold px-2 py-1 rounded-full">{canal}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Tom */}
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Tom de Abordagem</p>
+                      <p className="text-sm text-slate-700 font-medium">{sdr.tomAbordagem}</p>
+                    </div>
+
+                    {/* Ganchos */}
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Ganchos Principais</p>
+                      <div className="space-y-1">
+                        {sdr.ganchosPrincipais?.map((gancho, j) => (
+                          <div key={j} className="flex items-start gap-2">
+                            <Zap size={12} className="text-branddi-cyan mt-0.5 shrink-0" />
+                            <span className="text-xs text-slate-600">{gancho}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Personas */}
+                    <div className="mb-4">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Personas Abordadas</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sdr.personasAbordadas?.map((persona, j) => (
+                          <span key={j} className="bg-branddi-cyan/10 text-branddi-navy text-[10px] font-bold px-2 py-1 rounded-full">{persona}</span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Resultado */}
+                    <div className="bg-slate-50 p-3 rounded-xl mb-4">
+                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Resultado</p>
+                      <p className="text-sm font-bold text-slate-800">{sdr.resultado}</p>
+                    </div>
+
+                    {/* Pontos Fortes */}
+                    <div className="mb-3">
+                      <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1">✅ Pontos Fortes</p>
+                      <p className="text-xs text-slate-600 leading-relaxed">{sdr.pontosFortesResumo}</p>
+                    </div>
+
+                    {/* Pontos Fracos */}
+                    <div>
+                      <p className="text-[10px] font-bold text-amber-600 uppercase tracking-widest mb-1">⚠️ A Melhorar</p>
+                      <p className="text-xs text-slate-600 leading-relaxed">{sdr.pontosFracosResumo || 'Nenhum ponto crítico identificado.'}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* DIFERENCIAL DO VENCEDOR */}
+              {analysis.analiseComparativaSDRs.diferencialVencedor && (
+                <div className="card p-8 bg-slate-900 border-0">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                      <Zap size={20} className="text-emerald-400" fill="#34d399" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-white text-lg">Diferencial do Vencedor</h3>
+                      <p className="text-xs text-slate-400">O que fez a diferença na abordagem.</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-200 leading-relaxed">{analysis.analiseComparativaSDRs.diferencialVencedor}</p>
+                </div>
+              )}
+
+              {/* LIÇÕES PARA O TIME */}
+              {analysis.analiseComparativaSDRs.licoesParaTime?.length > 0 && (
+                <div className="card p-8">
+                  <SectionTitle title="Lições para o Time" subtitle="Padrões replicáveis extraídos desta comparação." />
+                  <div className="space-y-3 mt-4">
+                    {analysis.analiseComparativaSDRs.licoesParaTime.map((licao, i) => (
+                      <div key={i} className="flex items-start gap-4 bg-branddi-cyan/5 p-4 rounded-xl border border-branddi-cyan/10">
+                        <div className="w-8 h-8 rounded-lg bg-branddi-cyan/20 text-branddi-navy flex items-center justify-center font-bold text-sm shrink-0">
+                          {i + 1}
+                        </div>
+                        <p className="text-sm text-slate-700 font-medium leading-relaxed">{licao}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ANÁLISE GERAL */}
+              {analysis.analiseComparativaSDRs.analiseGeral && (
+                <div className="card p-8">
+                  <SectionTitle title="Análise Geral" subtitle="Visão consolidada da comparação." />
+                  <div className="bg-slate-50 p-6 rounded-xl border-l-4 border-branddi-cyan mt-4">
+                    <p className="text-sm text-slate-700 leading-relaxed">{analysis.analiseComparativaSDRs.analiseGeral}</p>
+                  </div>
+                </div>
+              )}
+
+            </div>
+          )}
+
           {activeTab === 'deals' && (
             <div className="max-w-6xl mx-auto fade-in">
               <SectionTitle title="Deals Salvos" subtitle="Lista dos negócios já analisados pela IA, ordenados por Health Score." />

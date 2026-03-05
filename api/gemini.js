@@ -126,6 +126,19 @@ export default async function handler(req, res) {
         - avaliacaoSLA: Verifique se os SLAs de follow-up estão sendo cumpridos (SDR: 3 dias, Closer: semanal). Informe dias desde o último contato real e classifique como "Em dia", "Atrasado" ou "Crítico".
         - gatilhosUrgencia: Liste alertas contextuais ativos para este deal (fraude ativa, sazonalidade, budget derretendo, stakeholder mudando, etc.). Classifique cada gatilho por nível: "Crítico", "Alto" ou "Médio".
 
+        5. Análise Comparativa de SDRs (APENAS se houver mais de 1 SDR identificado na seção "SDRs QUE TOCARAM ESTE DEAL" do histórico):
+        - Para CADA SDR que tocou o deal, analise separadamente:
+          • Canais utilizados (email, LinkedIn, WhatsApp, telefone)
+          • Tom de voz e abordagem (consultivo, urgente, genérico, empático)
+          • Ganchos de abertura usados (diagnóstico, derrubada bonificada, sazonalidade, dados concretos)
+          • Personas abordadas e se acertou o decisor ou influenciador certo
+          • Resiliência após negativas (desistiu, pivotou de persona, mudou abordagem?)
+          • Resultado final (ignorado, negativa, engajamento, reunião marcada)
+        - Identifique o "pulo do gato" do SDR que obteve melhor resultado
+        - Extraia 2-3 lições replicáveis para o time
+        - Classifique cada SDR: "Abordagem Vencedora" ou "A Melhorar"
+        - Se houver apenas 1 SDR, defina multiploSDRs como false e deixe os demais campos vazios
+
         Regras e Observações Técnicas:
         - IMPORTANTE: O campo "DATA DE REFERÊNCIA (HOJE)" no início do histórico indica a data de hoje. Use essa data como referência absoluta para calcular dias sem contato, interpretar datas de atividades e avaliar SLAs. NUNCA assuma outra data.
         - PRIORIZE AS INTERAÇÕES MAIS RECENTES: Dê mais peso às interações dos últimos 7-14 dias ao gerar o resumo, health score e insights. Se houver conversas de hoje ou desta semana, elas devem ser o foco principal da análise.
@@ -196,9 +209,36 @@ export default async function handler(req, res) {
         }
       },
       avaliacaoSLA: { type: "OBJECT", properties: { statusSLA: { type: "STRING" }, diasDesdeUltimoContato: { type: "INTEGER" }, detalhes: { type: "STRING" } } },
-      gatilhosUrgencia: { type: "ARRAY", items: { type: "OBJECT", properties: { gatilho: { type: "STRING" }, nivel: { type: "STRING" }, contexto: { type: "STRING" } } } }
+      gatilhosUrgencia: { type: "ARRAY", items: { type: "OBJECT", properties: { gatilho: { type: "STRING" }, nivel: { type: "STRING" }, contexto: { type: "STRING" } } } },
+      analiseComparativaSDRs: {
+        type: "OBJECT",
+        properties: {
+          multiploSDRs: { type: "BOOLEAN" },
+          sdrs: {
+            type: "ARRAY",
+            items: {
+              type: "OBJECT",
+              properties: {
+                nome: { type: "STRING" },
+                totalInteracoes: { type: "INTEGER" },
+                canaisUsados: { type: "ARRAY", items: { type: "STRING" } },
+                tomAbordagem: { type: "STRING" },
+                ganchosPrincipais: { type: "ARRAY", items: { type: "STRING" } },
+                personasAbordadas: { type: "ARRAY", items: { type: "STRING" } },
+                resultado: { type: "STRING" },
+                classificacao: { type: "STRING" },
+                pontosFortesResumo: { type: "STRING" },
+                pontosFracosResumo: { type: "STRING" }
+              }
+            }
+          },
+          diferencialVencedor: { type: "STRING" },
+          licoesParaTime: { type: "ARRAY", items: { type: "STRING" } },
+          analiseGeral: { type: "STRING" }
+        }
+      }
     },
-    required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia"]
+    required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia", "analiseComparativaSDRs"]
   };
 
   const MAX_RETRIES = 3;

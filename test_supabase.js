@@ -10,19 +10,20 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey);
 async function test() {
   console.log("Testing insert...");
   const { data: iData, error: iError } = await supabase
-    .from('analises_deals')
+    .from('deal_analyses')
     .upsert({
       deal_id: "99999",
+      deal_title: "Test Deal",
       analise_ia: { test: true },
       dados_brutos: "test data",
       metricas: { test: true }
     }, { onConflict: 'deal_id' });
-  
+
   console.log("Insert Error:", iError);
 
   console.log("Testing select...");
   const { data: sData, error: sError } = await supabase
-    .from('analises_deals')
+    .from('deal_analyses')
     .select('*')
     .eq('deal_id', "99999")
     .single();
