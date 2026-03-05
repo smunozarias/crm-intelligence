@@ -137,7 +137,6 @@ export default async function handler(req, res) {
         - Identifique o "pulo do gato" do SDR que obteve melhor resultado
         - Extraia 2-3 lições replicáveis para o time
         - Classifique cada SDR: "Abordagem Vencedora" ou "A Melhorar"
-        - Se houver dados de EMAIL TRACKING (rastreamento de aberturas), analise a taxa de abertura de cada SDR e correlacione com a qualidade dos assuntos e timing dos envios
         - Se houver apenas 1 SDR, defina multiploSDRs como false e deixe os demais campos vazios
 
         Regras e Observações Técnicas:
@@ -229,10 +228,7 @@ export default async function handler(req, res) {
                 resultado: { type: "STRING" },
                 classificacao: { type: "STRING" },
                 pontosFortesResumo: { type: "STRING" },
-                pontosFracosResumo: { type: "STRING" },
-                emailsEnviados: { type: "INTEGER" },
-                emailsAbertos: { type: "INTEGER" },
-                taxaAbertura: { type: "INTEGER" }
+                pontosFracosResumo: { type: "STRING" }
               }
             }
           },

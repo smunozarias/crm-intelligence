@@ -331,17 +331,6 @@ const App = () => {
       const metrics = calculateHardMetrics(dealData, allFlowItems);
       setProcessingStep(4);
 
-      // Fetch email tracking data
-      let emailTrackingData = [];
-      try {
-        const mailUrl = `/api/pipedrive/deals/${dealId}/mailMessages?api_token=${pipedriveToken}&limit=100`;
-        const mailRes = await fetch(mailUrl, { method: 'GET', headers: { 'Accept': 'application/json' } });
-        if (mailRes.ok) {
-          const mailData = await mailRes.json();
-          emailTrackingData = mailData.data || [];
-        }
-      } catch (e) { console.warn('Could not fetch mail tracking:', e); }
-
       const dataAtual = new Date().toLocaleDateString('pt-BR', { year: 'numeric', month: 'long', day: 'numeric' });
       let compiledHistory = `--- DATA DE REFERÊNCIA (HOJE) ---\n`;
       compiledHistory += `${dataAtual}\n\n`;
@@ -377,28 +366,6 @@ const App = () => {
         });
       }
 
-      // Email tracking summary per SDR
-      if (emailTrackingData.length > 0) {
-        const sdrEmailStats = {};
-        emailTrackingData.forEach(msg => {
-          const senderId = msg.user_id || msg.from?.[0]?.linked_person_id;
-          const sdrName = senderId && usersMap[senderId] ? usersMap[senderId] : 'Desconhecido';
-          if (!sdrEmailStats[sdrName]) sdrEmailStats[sdrName] = { enviados: 0, abertos: 0, naoAbertos: 0, clicados: 0 };
-          sdrEmailStats[sdrName].enviados++;
-          if (msg.mail_tracking_status === 'opened' || msg.open_count > 0) {
-            sdrEmailStats[sdrName].abertos++;
-          } else {
-            sdrEmailStats[sdrName].naoAbertos++;
-          }
-          if (msg.s_email_link_clicked_flag) sdrEmailStats[sdrName].clicados++;
-        });
-        compiledHistory += `\n--- EMAIL TRACKING (RASTREAMENTO DE ABERTURAS) ---\n`;
-        Object.entries(sdrEmailStats).forEach(([name, stats]) => {
-          const taxaAbertura = stats.enviados > 0 ? Math.round((stats.abertos / stats.enviados) * 100) : 0;
-          compiledHistory += `- ${name}: ${stats.enviados} emails enviados | ${stats.abertos} abertos (${taxaAbertura}%) | ${stats.naoAbertos} não abertos | ${stats.clicados} com link clicado\n`;
-        });
-      }
-
       compiledHistory += `\n--- HISTÓRICO DE ATIVIDADES ---\n`;
 
       allFlowItems.forEach(item => {
@@ -421,18 +388,7 @@ const App = () => {
           }
         }
         else if (item.object === 'mailThread' || item.object === 'mailMessage') {
-          // Try to find tracking data for this email
-          const mailId = item.data?.id;
-          const trackingMatch = emailTrackingData.find(m => m.mail_thread_id === mailId || m.id === mailId);
-          let trackingTag = '';
-          if (trackingMatch) {
-            if (trackingMatch.mail_tracking_status === 'opened' || trackingMatch.open_count > 0) {
-              trackingTag = ` [ABERTO${trackingMatch.open_count > 1 ? ` x${trackingMatch.open_count}` : ''}]`;
-            } else {
-              trackingTag = ' [NÃO ABERTO]';
-            }
-          }
-          compiledHistory += `[${dateStr}] ${sdrTag}E-MAIL${trackingTag}: Assunto: ${item.data?.subject}\n`;
+          compiledHistory += `[${dateStr}] ${sdrTag}E-MAIL: Assunto: ${item.data?.subject}\n`;
           if (item.data?.snippet) compiledHistory += `   Resumo: ${item.data.snippet}\n`;
         }
       });
@@ -1619,30 +1575,6 @@ const App = () => {
                         {sdr.classificacao === 'Abordagem Vencedora' ? '⭐ Vencedor(a)' : '🔄 A Melhorar'}
                       </span>
                     </div>
-
-                    {/* Email Tracking */}
-                    {(sdr.emailsEnviados > 0) && (
-                      <div className="bg-slate-50 p-3 rounded-xl mb-4 border border-slate-100">
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">📧 Email Tracking</p>
-                        <div className="grid grid-cols-3 gap-2 text-center">
-                          <div>
-                            <p className="text-lg font-black text-slate-800">{sdr.emailsEnviados}</p>
-                            <p className="text-[9px] text-slate-400 font-medium">Enviados</p>
-                          </div>
-                          <div>
-                            <p className="text-lg font-black text-emerald-600">{sdr.emailsAbertos || 0}</p>
-                            <p className="text-[9px] text-slate-400 font-medium">Abertos</p>
-                          </div>
-                          <div>
-                            <p className={`text-lg font-black ${sdr.taxaAbertura >= 50 ? 'text-emerald-600' : sdr.taxaAbertura >= 25 ? 'text-amber-600' : 'text-red-600'}`}>{sdr.taxaAbertura || 0}%</p>
-                            <p className="text-[9px] text-slate-400 font-medium">Taxa Abertura</p>
-                          </div>
-                        </div>
-                        <div className="w-full bg-slate-200 h-1.5 rounded-full mt-2 overflow-hidden">
-                          <div className={`h-full rounded-full transition-all ${sdr.taxaAbertura >= 50 ? 'bg-emerald-500' : sdr.taxaAbertura >= 25 ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${sdr.taxaAbertura || 0}%` }}></div>
-                        </div>
-                      </div>
-                    )}
 
                     {/* Canais */}
                     <div className="mb-4">
