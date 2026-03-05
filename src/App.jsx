@@ -585,26 +585,13 @@ const App = () => {
       {/* MAIN CONTENT */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
         {/* TOP BAR */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 z-10 shadow-sm shadow-slate-100/50">
-          <div className="flex items-center gap-4 bg-slate-50 px-4 py-2 rounded-lg border border-slate-200 w-96 max-w-full">
-            <Search size={18} className="text-slate-400" />
-            <input
-              placeholder="Buscar Negócios, Contatos ou Relatórios..."
-              className="bg-transparent border-none focus:outline-none text-sm w-full"
-            />
-          </div>
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-end px-8 z-10 shadow-sm shadow-slate-100/50">
           <div className="flex items-center gap-4">
-            <button className="p-2 text-slate-400 hover:text-branddi-cyan transition-colors relative">
-              <Bell size={20} />
-              <span className="absolute top-2 right-2 w-2 h-2 bg-branddi-cyan rounded-full border-2 border-white"></span>
-            </button>
-            <div className="h-8 w-[1px] bg-slate-200 mx-2"></div>
             <button
-              onClick={handleForceRefresh}
-              disabled={status === 'fetching' || status === 'analyzing'}
-              className="flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-all shadow-sm border border-slate-200 disabled:opacity-50 disabled:cursor-not-allowed">
-              <RefreshCw size={16} className={status === 'fetching' || status === 'analyzing' ? 'animate-spin' : ''} />
-              <span className="hidden sm:inline">Atualizar Análise</span>
+              onClick={() => setActiveTab('config')}
+              className="flex items-center gap-2 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-slate-50 transition-all shadow-sm border border-slate-200">
+              <Settings size={16} />
+              <span>Nova Análise</span>
             </button>
             <button
               onClick={copyInsight}
@@ -649,13 +636,25 @@ const App = () => {
                     <p className="text-sm text-slate-500 mb-4">A inteligência está sendo rodada em servidores seguros. Sua chave do Google Cloud está protegida na Vercel.</p>
                     <div>
                       <label className="text-xs font-bold text-slate-600 mb-1 block uppercase">Pipedrive Token</label>
-                      <input
-                        type="password"
-                        value={pipedriveToken}
-                        onChange={(e) => setPipedriveToken(e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-branddi-cyan outline-none transition-all"
-                        placeholder="Token do seu CRM"
-                      />
+                      {pipedriveToken ? (
+                        <div className="flex items-center gap-3">
+                          <div className="flex-1 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2 text-sm text-emerald-700 font-semibold flex items-center gap-2">
+                            <CheckCircle size={16} className="text-emerald-600" />
+                            Token configurado
+                          </div>
+                          <button onClick={() => setPipedriveToken('')} className="text-xs bg-white border border-slate-200 px-3 py-2 rounded-lg font-bold hover:bg-slate-50 transition-colors">
+                            Alterar
+                          </button>
+                        </div>
+                      ) : (
+                        <input
+                          type="password"
+                          value={pipedriveToken}
+                          onChange={(e) => setPipedriveToken(e.target.value)}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-sm focus:ring-2 focus:ring-branddi-cyan outline-none transition-all"
+                          placeholder="Token do seu CRM"
+                        />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -782,9 +781,12 @@ const App = () => {
                     <Copy size={16} />
                     <span>Dados Brutos</span>
                   </button>
-                  <button onClick={() => setActiveTab('config')} className="bg-white border border-slate-200 px-4 py-2.5 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-50 shadow-sm flex items-center gap-2 transition-all active:scale-95">
-                    <Settings size={16} />
-                    <span>Nova Análise</span>
+                  <button
+                    onClick={handleForceRefresh}
+                    disabled={status === 'fetching' || status === 'analyzing'}
+                    className="bg-white border border-slate-200 px-4 py-2.5 rounded-lg text-slate-600 font-bold text-sm hover:bg-slate-50 shadow-sm flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed">
+                    <RefreshCw size={16} className={status === 'fetching' || status === 'analyzing' ? 'animate-spin' : ''} />
+                    <span>Atualizar Análise</span>
                   </button>
                 </div>
               </div>
@@ -836,7 +838,7 @@ const App = () => {
                       <p className="text-xs font-bold text-branddi-navy uppercase tracking-wider">Interações Reais</p>
                       <div className="mt-2 flex items-baseline gap-1">
                         <span className="text-4xl font-black text-branddi-navy">{hardMetrics?.totalActions}</span>
-                        <span className="text-branddi-navy/60 text-sm font-bold ml-1">AÇÕES</span>
+                        <span className="text-branddi-navy/60 text-sm font-bold ml-1">PONTOS DE CONTATO</span>
                       </div>
                       <div className="flex items-center gap-1.5 mt-4">
                         <Activity size={14} className="text-branddi-navy/60" />
@@ -1022,14 +1024,17 @@ const App = () => {
                         </div>
                       </div>
 
-                      <div className="card p-8">
-                        <SectionTitle title="Regra da Persona" subtitle="O card está associado à pessoa certa?" />
-                        <div className={`mt-4 p-6 rounded-xl border-2 flex items-start gap-4 ${analysis.regraPersonaCumprida ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
-                          {analysis.regraPersonaCumprida ? <CheckCircle size={24} className="text-emerald-600 shrink-0" /> : <AlertCircle size={24} className="text-red-600 shrink-0" />}
-                          <div>
-                            <p className={`font-bold uppercase text-xs mb-1 ${analysis.regraPersonaCumprida ? 'text-emerald-700' : 'text-red-700'}`}>{analysis.regraPersonaCumprida ? 'Regra Cumprida' : 'Falha na Regra Persona'}</p>
-                            <p className="text-sm text-slate-700 leading-tight">{analysis.justificativaRegraPersona}</p>
-                          </div>
+                      <div className="card p-8 border-t-8 border-red-600">
+                        <SectionTitle title="Objeções Ativas" subtitle="O que o cliente levantou como barreira." />
+                        <div className="space-y-3 mt-4">
+                          {analysis.objecoes?.length > 0 ? analysis.objecoes.map((obj, i) => (
+                            <div key={i} className="bg-red-50/50 p-4 rounded-xl border-l-4 border-red-500">
+                              <div className="flex items-start gap-3">
+                                <div className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0"></div>
+                                <span className="text-sm text-slate-700 font-medium leading-tight">{obj}</span>
+                              </div>
+                            </div>
+                          )) : <div className="p-4 bg-emerald-50 rounded-xl"><p className="text-sm font-bold text-emerald-700">Nenhuma objeção ativa identificada.</p></div>}
                         </div>
                       </div>
 
