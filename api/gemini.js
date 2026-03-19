@@ -139,6 +139,21 @@ export default async function handler(req, res) {
         - Classifique cada SDR: "Abordagem Vencedora" ou "A Melhorar"
         - Se houver apenas 1 SDR, defina multiploSDRs como false e deixe os demais campos vazios
 
+        6. Cronologia Inteligente:
+        - Analise TODO o histórico de interações e identifique APENAS os marcos decisivos — momentos que mudaram o rumo do negócio, revelaram informações críticas ou representam pontos de inflexão.
+        - NÃO liste todas as atividades. Foque em selecionar 5-15 eventos realmente significativos.
+        - Tipos de marcos a identificar:
+          • reuniao_estagnada: Reunião que aconteceu mas não gerou avanço (informe o motivo: decisor ausente, lead frio, sem budget, etc.)
+          • engajamento_apos_silencio: Lead respondeu ou interagiu após um longo período sem resposta (informe quantos dias/meses de silêncio)
+          • objecao_levantada: Cliente apresentou uma objeção ou resistência nova
+          • negativa_forte: Lead deu uma negativa explícita ou pediu para parar os contatos
+          • recontato_apos_negativa: SDR retomou contato após negativa anterior (informe a estratégia usada)
+          • mudanca_stakeholder: Saída ou entrada de pessoa-chave no deal
+          • primeiro_contato: Primeiro touchpoint com o lead
+          • marco_positivo: Avanço concreto (reunião marcada, interesse confirmado, pedido de proposta, etc.)
+        - Para cada marco, indique: data exata, tipo, título resumido (frase curta), descrição detalhada do contexto, pessoa envolvida, e impacto (positivo/neutro/negativo).
+        - Ordene cronologicamente do mais recente para o mais antigo.
+
         Regras e Observações Técnicas:
         - IMPORTANTE: O campo "DATA DE REFERÊNCIA (HOJE)" no início do histórico indica a data de hoje. Use essa data como referência absoluta para calcular dias sem contato, interpretar datas de atividades e avaliar SLAs. NUNCA assuma outra data.
         - PRIORIZE AS INTERAÇÕES MAIS RECENTES: Dê mais peso às interações dos últimos 7-14 dias ao gerar o resumo, health score e insights. Se houver conversas de hoje ou desta semana, elas devem ser o foco principal da análise.
@@ -146,6 +161,7 @@ export default async function handler(req, res) {
         - Colar histórico do WhatsApp é procedimento padrão, nunca aponte como erro.
         - Utilize os campos técnicos do Pipedrive para embasar suas respostas (ex: add_time, done, type, subject, note, participants, status, custom fields).
         - Siga o schema de resposta JSON fornecido, preenchendo todos os campos obrigatórios.
+        - OBRIGATÓRIO: O campo "cronologiaInteligente" DEVE ser preenchido com pelo menos 5 marcos decisivos. Este campo é ESSENCIAL e NUNCA deve ser omitido ou retornado vazio.
         - Seja objetivo, claro e prático nas recomendações.
         - Use o vocabulário Branddi quando aplicável (agressores, takedown, diagnóstico, etc.).
         `;
@@ -236,9 +252,23 @@ export default async function handler(req, res) {
           licoesParaTime: { type: "ARRAY", items: { type: "STRING" } },
           analiseGeral: { type: "STRING" }
         }
+      },
+      cronologiaInteligente: {
+        type: "ARRAY",
+        items: {
+          type: "OBJECT",
+          properties: {
+            data: { type: "STRING" },
+            tipo: { type: "STRING" },
+            titulo: { type: "STRING" },
+            descricao: { type: "STRING" },
+            pessoa: { type: "STRING" },
+            impacto: { type: "STRING" }
+          }
+        }
       }
     },
-    required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia", "analiseComparativaSDRs"]
+    required: ["personas", "dores", "objecoes", "resumo", "sentimento", "score", "proximosPassos", "prospeccao", "participantesMapa", "mensagensPersonalizadas", "contornosObjecoes", "produtoRecomendado", "prontidaoReuniao", "avaliacaoSLA", "gatilhosUrgencia", "analiseComparativaSDRs", "cronologiaInteligente"]
   };
 
   const MAX_RETRIES = 3;
@@ -249,7 +279,8 @@ export default async function handler(req, res) {
     systemInstruction: { parts: [{ text: systemPrompt }] },
     generationConfig: {
       responseMimeType: "application/json",
-      responseSchema: responseSchema
+      responseSchema: responseSchema,
+      maxOutputTokens: 65536
     }
   });
 
