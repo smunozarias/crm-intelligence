@@ -343,11 +343,6 @@ const App = () => {
       let rawText = result.candidates?.[0]?.content?.parts?.[0]?.text || "{}";
       const parsedData = JSON.parse(rawText.trim());
 
-      // DEBUG: verificar se cronologiaInteligente existe na resposta
-      console.log('🔍 Keys na resposta Gemini:', Object.keys(parsedData));
-      console.log('🔍 cronologiaInteligente:', parsedData.cronologiaInteligente ? `${parsedData.cronologiaInteligente.length} marcos` : 'AUSENTE');
-      console.log('🔍 Finish reason:', result.candidates?.[0]?.finishReason);
-
       if (parsedData.resumo || parsedData.nota || parsedData.exemplos || parsedData.pontosMelhoria) {
         parsedData.avaliacaoProspecao = {
           resumo: parsedData.resumo,
